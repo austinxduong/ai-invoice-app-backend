@@ -70,6 +70,16 @@ exports.loginUser = async (req, res) => {
 exports.getMe = async (req, res) => {
 
     try {
+        const user = await User.findById(req.user.id);
+        res.json({
+            _id:user._id,
+            name: user.name,
+            email: user.email,
+
+            businessName: user.businessName || "",
+            address: user.address || "",
+            phone: user.phone || "",
+        });
     } catch (error) {
         res.status(500).json({ message: "Server error" });
     }
