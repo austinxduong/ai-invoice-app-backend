@@ -131,7 +131,9 @@ exports.updateInvoice = async (req, res) => {
 // delete a single invoice by its id
 exports.deleteInvoice = async (req, res) => {
     try {
-
+        const invoice = await Invoice.findByIdAndDelete(req.params.id);
+        if (!invoice) return res.status(404).json({ message: "Invoice not found"});
+        res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
         res 
             .status(500)
