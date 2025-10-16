@@ -52,7 +52,8 @@ exports.createInvoice = async (req, res) => {
 // get all invoices of logged inuser
 exports.getInvoices = async(req, res) => {
     try {
-
+        const invoices = await Invoice.find().populate("user", "name email");
+        res.json(invoices);
     } catch (error) {
         res 
             .status(500)
