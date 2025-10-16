@@ -77,7 +77,50 @@ exports.getInvoiceById = async (req, res) => {
 // update a single invoice by its id
 exports.updateInvoice = async (req, res) => {
     try {
+        const {
+            invoiceNumber,
+            invoiceDate,
+            dueDate,
+            billFrom,
+            billTo,
+            items,
+            notes,
+            paymentTerms,
+            status,
+            } = req.body
 
+            let subtotal = 0;
+            let taxTotal = 0;
+            if (items && items.length > 0) {
+                items.forEach((item) => { 
+                subtotal += item.unitPrice * item.quantity;
+                taxTotal += ((item.unitPrice * item.quantity) * (item.taxPercent || 0)) / 100;
+            });
+        }
+
+        const total = subtotal + taxTotal;
+
+        const updatedInvoice = await Invoice.findByIdAndUpdate(
+            req.params.id,
+            {
+                invoiceNumber,
+                invoiceDate,
+                dueDate,
+                billFrom,
+                billTo,
+                items,
+                notes,
+                paymentTerms,
+                status,
+                subtotal,
+                taxTotal,
+                total,
+            },
+            { new: true } 
+        );
+
+        if (!updatedInvoice) return res.status(404).json({ message: "Invoice not found" });
+        res.json(updatedInvoice);
     } catch (error) {
         res 
             .status(500)
