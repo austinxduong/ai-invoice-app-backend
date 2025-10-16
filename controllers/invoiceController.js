@@ -64,7 +64,9 @@ exports.getInvoices = async(req, res) => {
 // get single invoice by ID
 exports.getInvoiceById = async (req, res) => {
     try {
-
+        const invoice = await Invoice.findById(req.params.id).populate("user", "name email");
+        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        res.json(invoice);
     } catch (error) {
         res 
             .status(500)
