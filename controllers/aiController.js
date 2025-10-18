@@ -63,7 +63,39 @@ const parseInvoiceFromText = async (req, res) => {
 };
 
 const generateReminderEmail = async (req, res) => {
+
+    const { invoiceId } = req.body;
+
+    if (!invoiceId) {
+        return res.status(400).json({ message: "Invoice ID is required" });
+    }
+
     try {
+        const invoice = await Invoice.findById(invoiceId);
+
+        if (!invoice) {
+            return res.status(404).json({ message: "Invoice not found" });
+        }
+
+        const prompt = `
+        You are a professional and polite accounting assistant. Write a friendly reminder email to a client about an overdue or upcoming invoice payment.
+        
+        Use the following details to personalize the email:
+        - Client Name: ${invoice.billTo.clientName}
+        - Invoice Number ${invoice.invoiceNumber}
+        - Amount Due: ${invoice.total.toFixed(2)}
+        - Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}
+
+        The tone should be friendly but clear. Keep it concise. Start the email with "Subject:".
+        `;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+        });
+
+        res.status(200).json({ reminderText: response.text });
+
     } catch (error) {
         console.error("Error generating reminder with AI:", error);
         res.status(500).json({ message: "Failed to parse invoice data from text.", details: error.message })
