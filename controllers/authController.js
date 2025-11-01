@@ -68,7 +68,6 @@ exports.loginUser = async (req, res) => {
 
 // get current logged-in user
 exports.getMe = async (req, res) => {
-
     try {
         const user = await User.findById(req.user.id);
         res.json({
