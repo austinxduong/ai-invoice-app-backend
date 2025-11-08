@@ -12,7 +12,10 @@ const app = express();
 
 
 app.use(
-    cors()
+    cors({
+        origin: ["*", "http://localhost:8000/api/auth/login", "http://localhost:5173", "http://localhost:8000"]
+        
+    })
 );
 
 //connect database
