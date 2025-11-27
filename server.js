@@ -16,17 +16,20 @@ app.use((req, res, next) => {
         'http://localhost:5173',
         'http://172.20.20.20:5173',
         'http://localhost:3000',
-        'https://ai-invoice-app-b2ec.onrender.com' 
+        'https://ai-invoice-app-b2ec.onrender.com', 
+        'https://crustless-diastrophic-thi.ngrok-free.dev'
     ];
 
     // Allow requests with no origin (mobile apps, postman, etc.)
-    if (!origin || allowedOrigins.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    if (!origin) {
+        res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+    } else if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
     }
 
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning')
     res.setHeader('Access-Control-Max-Age', '3600');
 
     // Handle preflight requests
