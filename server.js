@@ -10,19 +10,32 @@ const aiRoutes = require('./routes/aiRoutes')
 
 const app = express();
 
-app.use(
-        cors({
-        origin: [
-            'http://localhost:5173',
-            'http://172.20.20.20:5173', // Your local IP
-            'http://localhost:3000',    // Backup port
-        ],
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
-        optionsSuccessStatus: 200 // for legacy browser support
-    })
-);
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    const allowedOrigins = [
+        'http://localhost:5173',
+        'http://172.20.20.20:5173',
+        'http://localhost:3000'
+    ];
+
+    // Allow requests with no origin (mobile apps, postman, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    }
+
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Max-Age', '3600');
+
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        res.status(204).end();
+        return;
+    }
+
+    next();
+});
 
 //connect database
 connectDB();
