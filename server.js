@@ -15,7 +15,8 @@ app.use((req, res, next) => {
     const allowedOrigins = [
         'http://localhost:5173',
         'http://172.20.20.20:5173',
-        'http://localhost:3000'
+        'http://localhost:3000',
+        'https://ai-invoice-app-b2ec.onrender.com' 
     ];
 
     // Allow requests with no origin (mobile apps, postman, etc.)
