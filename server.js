@@ -22,10 +22,16 @@ app.use((req, res, next) => {
 
     // Allow requests with no origin (mobile apps, postman, etc.)
     if (!origin) {
+    const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host;
+    
+    if (forwardedHost && forwardedHost.includes('ngrok-free.dev')) {
+        res.setHeader('Access-Control-Allow-Origin', 'https://crustless-diastrophic-thi.ngrok-free.dev');
+    } else {
         res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+        }
     } else if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
-    }
+}
 
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
