@@ -7,6 +7,7 @@ const connectDB = require("./config/db");
 const authRoutes = require('./routes/authRoutes')
 const invoiceRoutes = require('./routes/invoiceRoutes')
 const aiRoutes = require('./routes/aiRoutes')
+const productRoutes = require('./routes/productRoutes');
 
 const app = express();
 
@@ -23,7 +24,7 @@ app.use((req, res, next) => {
     // Allow requests with no origin (mobile apps, postman, etc.)
     if (!origin) {
     const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host;
-    
+
     if (forwardedHost && forwardedHost.includes('ngrok-free.dev')) {
         res.setHeader('Access-Control-Allow-Origin', 'https://crustless-diastrophic-thi.ngrok-free.dev');
     } else {
@@ -57,6 +58,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/ai", aiRoutes)
+app.use("/api/products", productRoutes);
 
 // start server
 const PORT = process.env.PORT || 8000;

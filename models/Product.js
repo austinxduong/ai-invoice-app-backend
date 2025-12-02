@@ -98,4 +98,79 @@ const ProductSchema = new mongoose.Schema({
     flavors:[{
         type:String
     }],
-})
+
+    //compliance information
+    compliance:{
+        batchNumber: {
+            type:String,
+            required:true
+        },
+        labTested: {
+            type:Boolean,
+            default: false
+        },
+        testResults: {
+            lab:String,
+            passedTest:Boolean,
+            pesticides:Boolean,
+            residualSolvents:Boolean,
+            heavyMetals:Boolean,
+            microbials:Boolean
+        },
+        harvestDate:Date,
+        packagedDate:Date,
+        expirationDate:Date,
+        licensedProducer:String,
+        stateTrackingId:String // for seed-to-sale tracking
+    },
+    
+    //business information
+    supplier: {
+        name:String,
+        contact:String,
+        license:String
+    },
+
+    //product status
+    isActive: {
+        type:Boolean,
+        default:true
+    },
+    isAvailable:{
+        type:Boolean,
+        default:true
+    },
+
+    //metadata
+    createdBy:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:'User',
+        required:true
+    },
+    images:[{
+        url:String,
+        alt:String
+    }]
+},{
+    timestamps:true
+});
+
+//indexes for better query performance
+ProductSchema.index({category:1,subcategory:1});
+ProductSchema.index({'compliance.batchNumber':1});
+ProductSchema.index({sku:1});
+ProductSchema.index({name:'text', description:'text'});
+
+//virtual for calculating inventory value
+ProductSchema.virtual('inventoryValue').get(function(){
+    if(this.pricing.length > 0) {
+        const basePrice = this.pricing[0].price;
+        return this.inventory.currentStock * basePrice
+    }
+    return 0;
+});
+
+//method to check if product is in stock
+ProductSchema.methods.isInStock = function(requestedQuantity=1) {
+    return this.inventory.currentStock >= requestedQuantity;
+}
