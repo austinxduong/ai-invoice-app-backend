@@ -129,4 +129,36 @@ router.delete('/:id', protect, async (req, res) => {
     } catch(error) {
         res.status(500).json({message: 'Error deleted product', error: error.message});
     }
+});
+
+// GET /api/products/categories/stats - Get category statistics
+router.get('/categories/stats', protect, async (req, res) => {
+    try {
+        const stats = await Product.aggregate([
+            {$match:{isActive:true}},
+            {
+                $group:{
+                    _id:'$category',
+                    count:{$sum:1},
+                    totalValue:{$sum:{$multiply:['$inventory.currentStock', '$pricing.0.price']}},
+                    lowStockItems:{
+                        $sum: {
+                            $cond:[
+                                { $lte:['$inventory.currentStock', '$inventory.lowStockAlert']},
+                                1,
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            {$sort:{count:-1}}
+        ]);
+
+        res.json(stats);
+    } catch (error) {
+        res.status(500).json({message: 'Error fetching category stats', error:error.message})
+    }
 })
+
+module.exports = router;
