@@ -111,3 +111,22 @@ router.put('/:id', protect, async (req, res) => {
         res.status(400).json({message:'Error updating product', error:error.message});
     }
 });
+
+// DELETE /api/products/:id - soft delete product
+router.delete('/:id', protect, async (req, res) => {
+    try {
+    const product = await Product.findByIdAndUpdate(
+        req.params.id,
+        {isActive:false},
+        {new:true}
+    );
+
+    if(!product) {
+        return res.status(404).json({message:'Product not found'});
+    }
+    
+    res.json({message:'Product deleted succesfully'});
+    } catch(error) {
+        res.status(500).json({message: 'Error deleted product', error: error.message});
+    }
+})
