@@ -69,3 +69,23 @@ router.get('/:id',protect, async (req, res) => {
         res.status(500).json({message: 'Error fetching product', error: error.message});
     }
 });
+
+// POST /api/products - create new product
+router.post('/', protect, async (req, res) => {
+    try {
+        const productData = {
+            ...req.body,
+            createdBy:req.user._id
+        };
+
+        const product = new Product(productData);
+        await product.save();
+
+        res.status(200).json({
+            message: 'Product created successfully',
+            product
+        });
+    } catch (error) {
+        res.status(400).json({message:'Error creating product', error:error.message});
+    }
+});
