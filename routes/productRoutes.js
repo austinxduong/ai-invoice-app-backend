@@ -89,3 +89,25 @@ router.post('/', protect, async (req, res) => {
         res.status(400).json({message:'Error creating product', error:error.message});
     }
 });
+
+// PUT /api/products/:id - update product
+router.put('/:id', protect, async (req, res) => {
+    try {
+        const product = await Product.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            {new:true, runValidators:true}
+        );
+
+        if(!product) {
+            return res.status(404).json({message:'Product not found'});
+        }
+
+        res.json({
+            message:'Product updated successfully',
+            product
+        });
+    } catch(error) {
+        res.status(400).json({message:'Error updating product', error:error.message});
+    }
+});
