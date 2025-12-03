@@ -54,7 +54,7 @@ const ProductSchema = new mongoose.Schema({
         unit:{
             type:String,
             required: true,
-            enum:['gram', 'eigth', 'quarter', 'half', 'ounce', 'each', 'package']
+            enum:['gram', 'eighth', 'quarter', 'half', 'ounce', 'each', 'package']
         },
     weight: {
             type:Number, // weight in grams
@@ -93,7 +93,7 @@ const ProductSchema = new mongoose.Schema({
     },
     effects:[{
         type:String,
-        enum:['relaxed', 'eurphoric', 'uplifted', 'creative', 'focused', 'sleepy', 'engergetic', 'happy']
+        enum:['relaxed', 'euphoric', 'uplifted', 'creative', 'focused', 'sleepy', 'energetic', 'happy']
     }],
     flavors:[{
         type:String
@@ -174,3 +174,5 @@ ProductSchema.virtual('inventoryValue').get(function(){
 ProductSchema.methods.isInStock = function(requestedQuantity=1) {
     return this.inventory.currentStock >= requestedQuantity;
 }
+
+module.exports = mongoose.model('Product', ProductSchema);
