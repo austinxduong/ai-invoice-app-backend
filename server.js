@@ -14,8 +14,8 @@ const app = express();
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     const allowedOrigins = [
-        'http://localhost:5174',
-        'http://172.20.20.20:5174',
+        'http://localhost:5173',
+        'http://172.20.20.20:5173',
         'http://localhost:3000',
         'https://ai-invoice-app-b2ec.onrender.com', 
         'https://crustless-diastrophic-thi.ngrok-free.dev'
@@ -28,7 +28,7 @@ app.use((req, res, next) => {
     if (forwardedHost && forwardedHost.includes('ngrok-free.dev')) {
         res.setHeader('Access-Control-Allow-Origin', 'https://crustless-diastrophic-thi.ngrok-free.dev');
     } else {
-        res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5174');
+        res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
         }
     } else if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
