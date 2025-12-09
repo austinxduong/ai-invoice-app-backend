@@ -8,6 +8,7 @@ const authRoutes = require('./routes/authRoutes')
 const invoiceRoutes = require('./routes/invoiceRoutes')
 const aiRoutes = require('./routes/aiRoutes')
 const productRoutes = require('./routes/productRoutes');
+const transactionRoutes = require('./routes/transactionRoutes')
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/ai", aiRoutes)
 app.use("/api/products", productRoutes);
+app.use('/api/transactions', transactionRoutes);
 
 // start server
 const PORT = process.env.PORT || 8000;
