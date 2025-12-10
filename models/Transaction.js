@@ -67,44 +67,53 @@ const TransactionSchema = new mongoose.Schema({
         }
     }],
 
-    // Financial totals
-    totals: {
-        subtotal: {
+// Financial totals
+totals: {
+    subtotal: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    discountAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    discountedSubtotal: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    taxAmount: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    grandTotal: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    changeAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    // Detailed tax breakdown
+    taxBreakdown: {
+        total: {
             type: Number,
-            required: true,
-            min: 0
+            default: 0
         },
-        discountAmount: {
+        excise: {
             type: Number,
-            default: 0,
-            min: 0
+            default: 0
         },
-        discountedSubtotal: {
+        cultivation: {
             type: Number,
-            required: true,
-            min: 0
+            default: 0
         },
-        taxAmount: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        grandTotal: {
-            type: Number,
-            required: true,
-            min: 0
-        },
-        changeAmount: {
-            type: Number,
-            default: 0,
-            min: 0
-        },
-        // Detailed tax breakdown
-        taxBreakdown: {
-            total: {
-                type: Number,
-                default: 0
-            },
+        sales: {
             state: {
                 type: Number,
                 default: 0
@@ -117,12 +126,13 @@ const TransactionSchema = new mongoose.Schema({
                 type: Number,
                 default: 0
             },
-            excise: {
+            total: {
                 type: Number,
                 default: 0
             }
         }
-    },
+    }
+},
 
     // Discount information
     discount: {
