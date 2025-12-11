@@ -101,12 +101,28 @@ router.get('/', protect, async (req, res) => {
         // Build filter object
         const filter = { isActive: true };
         
-        if (startDate && endDate) {
-            filter.createdAt = {
-                $gte: new Date(startDate),
-                $lte: new Date(endDate)
-            };
-        }
+if (startDate && endDate) {
+    console.log('🔍 Backend: Using localDateString for filtering');
+    
+    // Convert to MM/DD/YYYY format
+    const targetDate = new Date(startDate).toLocaleDateString('en-US');
+    
+    console.log('🔍 Backend: Target date:', targetDate);
+    console.log('🔍 Backend: Filtering by receiptData.localDateString =', targetDate);
+    
+    // Debug: Let's see what localDateStrings exist in the database
+    const sampleTransactions = await Transaction.find({ 
+        isActive: true,
+        'receiptData.localDateString': { $exists: true }
+    }).select('transactionId receiptData.localDateString').limit(5);
+    
+    console.log('🔍 Backend: Sample localDateStrings in database:');
+    sampleTransactions.forEach(txn => {
+        console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
+    });
+    
+    filter['receiptData.localDateString'] = targetDate;
+}
         
         if (status) filter.status = status;
         if (paymentMethod) filter.paymentMethod = paymentMethod;
