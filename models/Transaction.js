@@ -183,6 +183,14 @@ totals: {
     // Receipt data
     receiptData: {
         receiptNumber: String,
+        timestamp: {
+            type: Date,
+            default: Date.now
+        },
+        localDateString: String, // e.g., "12/10/2025"
+        localTimeString: String, // e.g., "3:45:30 PM"
+        timezone: String, // e.g., "America/Los_Angeles" 
+        timezoneOffset: Number, // Offset in minutes
         printed: {
             type: Boolean,
             default: false
