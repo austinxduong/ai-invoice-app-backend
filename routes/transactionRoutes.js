@@ -105,28 +105,83 @@ if (startDate && endDate) {
     console.log('🔍 Backend: Using localDateString for filtering');
     
     // Convert to MM/DD/YYYY format
-    const targetDate = new Date(startDate).toLocaleDateString('en-US');
+    const startTargetDate = new Date(startDate).toLocaleDateString('en-US');
+    const endTargetDate = new Date(endDate).toLocaleDateString('en-US');
     
-    console.log('🔍 Backend: Target date:', targetDate);
-    console.log('🔍 Backend: Filtering by receiptData.localDateString =', targetDate);
-    
-    // Debug: Let's see what localDateStrings exist in the database
-    const sampleTransactions = await Transaction.find({ 
-        isActive: true,
-        'receiptData.localDateString': { $exists: true }
-    }).select('transactionId receiptData.localDateString').limit(5);
-    
-    console.log('🔍 Backend: Sample localDateStrings in database:');
-    sampleTransactions.forEach(txn => {
-        console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
+    console.log('🔍 Backend: Date range filter:', {
+        startDate: startDate,
+        endDate: endDate,
+        startTargetDate: startTargetDate,
+        endTargetDate: endTargetDate
     });
     
-    filter['receiptData.localDateString'] = targetDate;
+    // Get ALL transactions to see what we have
+    const allTransactions = await Transaction.find({ 
+        isActive: true,
+        'receiptData.localDateString': { $exists: true }
+    }).select('transactionId receiptData.localDateString paymentMethod').limit(10);
+    
+    console.log('🔍 Backend: ALL transactions in database:');
+    allTransactions.forEach(txn => {
+        console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}" (${txn.paymentMethod})`);
+    });
+    
+    // Test different filter approaches
+    console.log('🔍 Backend: Testing filter approaches...');
+    
+    // Approach 1: Exact match for single day
+    if (startTargetDate === endTargetDate) {
+        console.log('🔍 Backend: Single day - exact match filter');
+        filter['receiptData.localDateString'] = startTargetDate;
+        
+        // Test this filter
+        const testResult = await Transaction.find({
+            isActive: true,
+            'receiptData.localDateString': startTargetDate
+        }).select('transactionId receiptData.localDateString');
+        
+        console.log(`🔍 Backend: Exact match test found ${testResult.length} transactions:`);
+        testResult.forEach(txn => {
+            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
+        });
+        
+    } else {
+        console.log('🔍 Backend: Date range filter');
+        // For date ranges, we need a different approach with string dates
+        const allDatesInRange = [];
+        const currentDate = new Date(startDate);
+        const endDateObj = new Date(endDate);
+        
+        while (currentDate <= endDateObj) {
+            allDatesInRange.push(currentDate.toLocaleDateString('en-US'));
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        console.log('🔍 Backend: Dates in range:', allDatesInRange);
+        
+        filter['receiptData.localDateString'] = { $in: allDatesInRange };
+    }
 }
         
         if (status) filter.status = status;
         if (paymentMethod) filter.paymentMethod = paymentMethod;
         if (employeeId) filter['compliance.employeeId'] = employeeId;
+
+        // 🐛 DEBUG: Log final filter before actual query
+        console.log('🔍 Backend: Final filter object before query:', JSON.stringify(filter, null, 2));
+
+        // 🐛 DEBUG: Test the exact query without pagination first
+        const testActualQuery = await Transaction.find(filter).select('transactionId receiptData.localDateString');
+        console.log(`🔍 Backend: Actual query (no pagination) found ${testActualQuery.length} transactions:`);
+        testActualQuery.forEach(txn => {
+            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
+        });
+
+        console.log('🔍 Backend: Query parameters:', { 
+            skip: (parseInt(page) - 1) * parseInt(limit), 
+            limit: parseInt(limit), 
+            sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 } 
+        });
 
         // Calculate pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -139,6 +194,13 @@ if (startDate && endDate) {
             .limit(parseInt(limit))
             .populate('compliance.employeeId', 'firstName lastName')
             .populate('createdBy', 'firstName lastName');
+
+        // 🐛 DEBUG: Check final paginated query results
+        console.log(`🔍 Backend: Final paginated query found ${transactions.length} transactions:`);
+        transactions.forEach(txn => {
+            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}" (status: ${txn.status})`);
+        });
+        console.log(`🔍 Backend: Total count: ${await Transaction.countDocuments(filter)}`);
 
         const total = await Transaction.countDocuments(filter);
 
