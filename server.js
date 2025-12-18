@@ -9,6 +9,9 @@ const invoiceRoutes = require('./routes/invoiceRoutes')
 const aiRoutes = require('./routes/aiRoutes')
 const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes')
+const demoRoutes = require('./routes/demoRoutes')
+const { protect, requireAccess } = require('./middlewares/authMiddleware')
+
 
 const app = express();
 
@@ -59,8 +62,12 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/ai", aiRoutes)
-app.use("/api/products", productRoutes);
-app.use('/api/transactions', transactionRoutes);
+// app.use("/api/products", productRoutes);
+app.use('/api/products', protect, requireAccess); 
+// app.use('/api/transactions', transactionRoutes);
+app.use('/api/transactions', protect, requireAccess);  
+app.use('/api', demoRoutes)
+app.use('/api/reports', protect, requireAccess); 
 
 // start server
 const PORT = process.env.PORT || 8000;
