@@ -62,12 +62,12 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/ai", aiRoutes)
-// app.use("/api/products", productRoutes);
-app.use('/api/products', protect, requireAccess); 
-// app.use('/api/transactions', transactionRoutes);
-app.use('/api/transactions', protect, requireAccess);  
+app.use("/api/products", productRoutes);
+app.use('/api/transactions', transactionRoutes);
 app.use('/api', demoRoutes)
-app.use('/api/reports', protect, requireAccess); 
+
+
+
 
 // start server
 const PORT = process.env.PORT || 8000;

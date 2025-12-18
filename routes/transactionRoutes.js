@@ -1,12 +1,12 @@
 const express = require('express');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
-const { protect } = require('../middlewares/authMiddleware');
+const { protect, requireAccess } = require('../middlewares/authMiddleware');
 
 const router = express.Router();
 
 // POST /api/transactions - Create new transaction
-router.post('/', protect, async (req, res) => {
+router.post('/', protect, requireAccess, async (req, res) => {
     try {
         const {
             transactionId,
@@ -84,7 +84,7 @@ router.post('/', protect, async (req, res) => {
 });
 
 // GET /api/transactions - Get transactions with filtering
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, requireAccess, async (req, res) => {
     try {
         const {
             startDate,
@@ -223,7 +223,7 @@ if (startDate && endDate) {
 });
 
 // GET /api/transactions/:id - Get single transaction
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, requireAccess, async (req, res) => {
     try {
         const transaction = await Transaction.findById(req.params.id)
             .populate('compliance.employeeId', 'firstName lastName')
@@ -245,7 +245,7 @@ router.get('/:id', protect, async (req, res) => {
 });
 
 // GET /api/transactions/reports/summary - Get sales summary for date range
-router.get('/reports/summary', protect, async (req, res) => {
+router.get('/reports/summary', protect, requireAccess, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
         
@@ -278,7 +278,7 @@ router.get('/reports/summary', protect, async (req, res) => {
 });
 
 // GET /api/transactions/reports/daily - Get daily sales data
-router.get('/reports/daily', protect, async (req, res) => {
+router.get('/reports/daily', protect, requireAccess, async (req, res) => {
     try {
         const { date } = req.query;
         const targetDate = date ? new Date(date) : new Date();
@@ -338,7 +338,7 @@ router.get('/reports/daily', protect, async (req, res) => {
 });
 
 // PUT /api/transactions/:id/refund - Process refund
-router.put('/:id/refund', protect, async (req, res) => {
+router.put('/:id/refund', protect, requireAccess, async (req, res) => {
     try {
         const { amount, reason } = req.body;
         

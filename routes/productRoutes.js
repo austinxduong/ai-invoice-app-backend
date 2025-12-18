@@ -1,11 +1,11 @@
 const express = require('express');
 const Product = require('../models/Product');
-const {protect} = require('../middlewares/authMiddleware')
+const {protect, requireAccess} = require('../middlewares/authMiddleware')
 
 const router = express.Router();
 
 // GET /api/products - get all products with filtering
-router.get('/', protect, async(req, res) => {
+router.get('/', protect, requireAccess, async(req, res) => {
     try {
         const {
             category,
@@ -55,7 +55,7 @@ router.get('/', protect, async(req, res) => {
 })
 
 // GET /api/products/:id - get single product
-router.get('/:id',protect, async (req, res) => {
+router.get('/:id',protect, requireAccess, async (req, res) => {
     try {
         const product = await Product.findById(req.params.id)
         .populate('createdBy', 'firstName lastName');
@@ -71,7 +71,7 @@ router.get('/:id',protect, async (req, res) => {
 });
 
 // POST /api/products - create new product
-router.post('/', protect, async (req, res) => {
+router.post('/', protect, requireAccess, async (req, res) => {
     try {
         const productData = {
             ...req.body,
@@ -91,7 +91,7 @@ router.post('/', protect, async (req, res) => {
 });
 
 // PUT /api/products/:id - update product
-router.put('/:id', protect, async (req, res) => {
+router.put('/:id', protect, requireAccess, async (req, res) => {
     try {
         const product = await Product.findByIdAndUpdate(
             req.params.id,
@@ -113,7 +113,7 @@ router.put('/:id', protect, async (req, res) => {
 });
 
 // DELETE /api/products/:id - soft delete product
-router.delete('/:id', protect, async (req, res) => {
+router.delete('/:id', protect, requireAccess, async (req, res) => {
     try {
     const product = await Product.findByIdAndUpdate(
         req.params.id,
@@ -132,7 +132,7 @@ router.delete('/:id', protect, async (req, res) => {
 });
 
 // GET /api/products/categories/stats - Get category statistics
-router.get('/categories/stats', protect, async (req, res) => {
+router.get('/categories/stats', protect, requireAccess, async (req, res) => {
     try {
         const stats = await Product.aggregate([
             {$match:{isActive:true}},
