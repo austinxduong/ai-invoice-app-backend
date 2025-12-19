@@ -195,7 +195,27 @@ const DemoRequestSchema = new mongoose.Schema({
   userAccountCreated: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }
+  },
+
+  // Payment Link Fields
+    paymentToken: {
+    type: String,
+    unique: true,
+    sparse: true  // Allows multiple null values
+    },
+
+    paymentLinkExpires: {
+    type: Date
+    },
+
+    paymentLinkClicked: {
+    type: Boolean,
+    default: false
+    },
+
+    paymentLinkClickedAt: {
+    type: Date
+    }
   
 }, {
   timestamps: true

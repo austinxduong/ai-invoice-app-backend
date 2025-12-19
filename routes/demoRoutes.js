@@ -4,6 +4,20 @@ const DemoRequest = require('../models/DemoRequest');
 const User = require('../models/User');
 const { protect, requireAdmin, requireSalesAccess } = require('../middlewares/authMiddleware');
 
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+})
+
+
 // Submit demo request (PUBLIC ROUTE - no authentication required)
 router.post('/demo-requests', async (req, res) => {
   try {
@@ -14,9 +28,26 @@ router.post('/demo-requests', async (req, res) => {
     
     console.log('✅ Demo request saved:', demoRequest._id);
     
-    // TODO: Send notification email to sales team
-    // TODO: Add to CRM/Calendar system
-    // TODO: Send confirmation email to requester
+    // Generate unique payment token
+    const paymentToken = crypto.randomBytes(32).toString('hex');
+    
+    // Store payment link in demo request (add this field to your DemoRequest model)
+    demoRequest.paymentToken = paymentToken;
+    demoRequest.paymentLinkExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    await demoRequest.save();
+
+    // Generate payment URL
+    const paymentUrl = `${process.env.FRONTEND_URL}/pay/${paymentToken}`;
+
+    // Send emails
+    try {
+      await sendCustomerEmail(demoRequest, paymentUrl);
+      await sendAdminNotification(demoRequest, paymentUrl);
+      console.log('✅ Emails sent successfully');
+    } catch (emailError) {
+      console.error('⚠️ Email sending failed, but demo was saved:', emailError.message);
+      // Don't fail the request if email fails
+    }
     
     res.status(201).json({
       message: 'Demo request submitted successfully',
@@ -31,6 +62,176 @@ router.post('/demo-requests', async (req, res) => {
     });
   }
 });
+
+
+
+
+// Customer email function
+const sendCustomerEmail = async (demo, paymentUrl) => {
+  const customerEmailTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #059669, #047857); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; }
+        .cta-button { display: inline-block; background: #059669; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+        .features { background: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0; }
+        .footer { background: #f8f9fa; padding: 15px; border-radius: 0 0 8px 8px; text-align: center; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌿 Thank you for requesting a demo, ${demo.firstName}!</h1>
+        </div>
+        
+        <div class="content">
+            <p>Hi ${demo.firstName},</p>
+            
+            <p>Thank you for your interest in our cannabis ERP platform for <strong>${demo.companyName}</strong>! We're excited to help you streamline your operations and ensure compliance.</p>
+            
+            <div class="features">
+                <h3>🚀 Ready to get started right away?</h3>
+                <p>You can skip the wait and create your account today. Your subscription includes:</p>
+                <ul>
+                    <li>✅ Complete cannabis ERP system</li>
+                    <li>✅ Inventory & compliance management</li>
+                    <li>✅ Point-of-sale integration</li>
+                    <li>✅ Real-time reporting & analytics</li>
+                    <li>✅ 24/7 support & onboarding</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center;">
+                <a href="${paymentUrl}" class="cta-button">
+                    🔐 Create Your Account - $299/month
+                </a>
+            </div>
+            
+            <p><strong>What happens next:</strong></p>
+            <p>🔸 Click the link above to create your account and start your subscription<br>
+               🔸 Your account will be set up automatically after payment<br>
+               🔸 You'll receive login credentials via email<br>
+               🔸 Our team will contact you within 24 hours for onboarding</p>
+            
+            <p><strong>Prefer a demo call first?</strong> No problem! Our team will reach out within 24 hours to schedule your personalized demonstration.</p>
+            
+            <p>Questions? Just reply to this email.</p>
+            
+            <p>Best regards,<br>
+            Austin Duong<br>
+            Cannabis ERP Solutions</p>
+        </div>
+        
+        <div class="footer">
+            <p>This secure link is personalized for ${demo.companyName} and expires in 30 days.</p>
+            <p>If you no longer wish to receive emails, please reply with "unsubscribe".</p>
+        </div>
+    </div>
+</body>
+</html>`;
+
+  const mailOptions = {
+    from: `"Cannabis ERP Solutions" <${process.env.SMTP_USER}>`,
+    to: demo.email,
+    subject: `🌿 ${demo.firstName}, your cannabis ERP demo & account setup`,
+    html: customerEmailTemplate
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log('✅ Customer email sent to:', demo.email);
+  } catch (error) {
+    console.error('❌ Failed to send customer email:', error);
+    throw error;
+  }
+};
+
+// Admin notification function  
+const sendAdminNotification = async (demo, paymentUrl) => {
+  const adminEmailTemplate = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif;">
+    <h2>🚨 NEW DEMO REQUEST</h2>
+    
+    <div style="background: #f5f5f5; padding: 20px; border-radius: 8px;">
+        <h3>${demo.companyName}</h3>
+        <p><strong>Contact:</strong> ${demo.firstName} ${demo.lastName}</p>
+        <p><strong>Email:</strong> ${demo.email}</p>
+        <p><strong>Phone:</strong> ${demo.phone}</p>
+        <p><strong>Industry:</strong> ${demo.industry}</p>
+        <p><strong>Locations:</strong> ${demo.numberOfLocations}</p>
+        <p><strong>States:</strong> ${demo.states}</p>
+        <p><strong>Budget:</strong> ${demo.budget}</p>
+        <p><strong>Timeline:</strong> ${demo.timeline}</p>
+        <p><strong>License Types:</strong> ${demo.licenseTypes ? demo.licenseTypes.join(', ') : 'N/A'}</p>
+        <p><strong>Lead Score:</strong> ${demo.leadScore}/100</p>
+    </div>
+    
+    <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <h4>💬 Primary Pain Points:</h4>
+        <p>${demo.primaryPainPoints}</p>
+    </div>
+    
+    <div style="background: #fff3cd; padding: 15px; border-radius: 8px;">
+        <h4>🔗 Customer's Payment Link:</h4>
+        <p><a href="${paymentUrl}" target="_blank">${paymentUrl}</a></p>
+        <p><small>Customer received automated email with this link</small></p>
+    </div>
+    
+    <div style="background: #f8f9fa; padding: 15px; border: 1px dashed #ccc; margin-top: 20px;">
+        <h4>📧 Follow-up Email Template (Copy & Paste):</h4>
+        <p>Hi ${demo.firstName},</p>
+        <p>Following up on your demo request for ${demo.companyName}. I'd love to show you how our platform can help with ${demo.primaryPainPoints}.</p>
+        <p>Your secure signup link: <a href="${paymentUrl}">${paymentUrl}</a></p>
+        <p>Available for a quick call? Just reply with your preferred time.</p>
+        <p>Best, Austin</p>
+    </div>
+</body>
+</html>`;
+
+  const adminMailOptions = {
+    from: `"Demo Alerts" <${process.env.SMTP_USER}>`,
+    to: process.env.ADMIN_EMAIL, // Your email
+    subject: `🚨 NEW DEMO: ${demo.companyName} (${demo.firstName} ${demo.lastName}) - Score: ${demo.leadScore}`,
+    html: adminEmailTemplate
+  };
+
+  try {
+    await transporter.sendMail(adminMailOptions);
+    console.log('✅ Admin notification sent');
+  } catch (error) {
+    console.error('❌ Failed to send admin email:', error);
+    throw error;
+  }
+};
+
+
+
+router.get('/test-email', async (req, res) => {
+  try {
+    const testEmail = {
+      from: `"Cannabis ERP Test" <${process.env.SMTP_USER}>`,
+      to: process.env.ADMIN_EMAIL,
+      subject: '🧪 Email Test from Cannabis ERP',
+      html: '<h2>✅ Email configuration is working!</h2><p>Your demo notification emails will work properly.</p>'
+    };
+    
+    await transporter.sendMail(testEmail);
+    res.json({ message: '✅ Test email sent successfully!' });
+  } catch (error) {
+    console.error('❌ Email test failed:', error);
+    res.status(500).json({ error: 'Email test failed', details: error.message });
+  }
+});
+
+
+
 
 // Get all demo requests (ADMIN/SALES ONLY)
 router.get('/demo-requests', protect, requireSalesAccess, async (req, res) => {
