@@ -123,7 +123,7 @@ const sendCustomerEmail = async (demo, paymentUrl) => {
             <p>Questions? Just reply to this email.</p>
             
             <p>Best regards,<br>
-            Austin Duong<br>
+            Austin X. Duong<br>
             Cannabis ERP Solutions</p>
         </div>
         
