@@ -46,22 +46,36 @@ exports.loginUser = async (req, res) => {
 
     try {
         const user = await User.findOne({ email }).select("+password");
+        
+        console.log('🔍 Login attempt for:', email);
+        console.log('🔍 User found:', !!user);
+        
+        if (!user) {
+            return res.status(401).json({ message: "invalid credentials" });
+        }
+        
+        console.log('🔍 User has password:', !!user.password);
+        console.log('🔍 Password length in DB:', user.password ? user.password.length : 0);
+        console.log('🔍 Provided password:', password);
 
-        if (user && (await user.matchPassword(password))) {
+        const passwordMatch = await user.matchPassword(password);
+        console.log('🔍 Password match result:', passwordMatch);
+
+        if (passwordMatch) {
             res.json({
                 _id: user._id,
                 name: user.name,
                 email: user.email,
                 token: generateToken(user._id),
-
                 businessName: user.businessName || "",
                 address: user.address || "",
                 phone: user.phone || "",
             });
         } else {
-            res.status(401).json({ message: "invalid credentials"});
+            res.status(401).json({ message: "invalid credentials" });
         }
     } catch (error) {
+        console.error('Login error:', error);
         res.status(500).json({ message: "Server error" });
     }
 };

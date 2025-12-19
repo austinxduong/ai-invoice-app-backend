@@ -4,121 +4,7 @@ const DemoRequest = require('../models/DemoRequest');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 
-// Validate payment token and return demo data
-router.get('/validate/:token', async (req, res) => {
-  try {
-    const { token } = req.params;
-    console.log('🔍 Validating payment token:', token);
-    
-    const demoRequest = await DemoRequest.findOne({ 
-      paymentToken: token,
-      paymentLinkExpires: { $gt: new Date() } // Not expired
-    });
-    
-    if (!demoRequest) {
-      console.log('❌ Invalid or expired token:', token);
-      return res.status(404).json({ error: 'Invalid or expired payment link' });
-    }
-    
-    // Mark as clicked if first time
-    if (!demoRequest.paymentLinkClicked) {
-      demoRequest.paymentLinkClicked = true;
-      demoRequest.paymentLinkClickedAt = new Date();
-      await demoRequest.save();
-      console.log('👆 Payment link clicked for first time');
-    }
-    
-    // Return demo data for payment page
-    const responseData = {
-      email: demoRequest.email,
-      firstName: demoRequest.firstName,
-      lastName: demoRequest.lastName,
-      companyName: demoRequest.companyName,
-      phone: demoRequest.phone,
-      demoDate: demoRequest.createdAt,
-      demoId: demoRequest._id
-    };
-    
-    console.log('✅ Token validated for:', responseData.email);
-    res.json(responseData);
-    
-  } catch (error) {
-    console.error('❌ Error validating payment token:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Create account from payment (TEST VERSION)
-router.post('/create-account', async (req, res) => {
-  try {
-    const { email, firstName, lastName, company, password, paymentLinkId } = req.body;
-    console.log('💳 Creating account for payment:', email);
-    
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Account already exists for this email' 
-      });
-    }
-    
-    // Hash the user's custom password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Create user account
-    const user = new User({
-      email,
-      name: `${firstName} ${lastName}`,
-      businessName: company,
-      password: hashedPassword,
-      accessLevel: 'paid',
-      subscriptionStatus: 'active',
-      companyName: company,
-      paymentCompleted: true,
-      accountCreatedFromPayment: true,
-      createdAt: new Date()
-    });
-    
-    await user.save();
-    
-    // Update demo request status
-    const demoRequest = await DemoRequest.findById(paymentLinkId);
-    if (demoRequest) {
-      demoRequest.status = 'closed_won';
-      demoRequest.userAccountCreated = user._id;
-      demoRequest.closedAt = new Date();
-      await demoRequest.save();
-    }
-    
-    // Send welcome email with login credentials
-    try {
-      await sendWelcomeEmail(email, firstName, company);
-      console.log('✅ Welcome email sent successfully');
-    } catch (emailError) {
-      console.error('⚠️ Account created but email failed:', emailError.message);
-      // Don't fail the whole request if email fails
-    }
-    
-    console.log('✅ Account created successfully:', email);
-    
-    res.json({
-      success: true,
-      message: 'Account created successfully',
-      userId: user._id
-    });
-    
-  } catch (error) {
-    console.error('❌ Error creating account:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to create account' 
-    });
-  }
-});
-
 const nodemailer = require('nodemailer');
-
 
 // Email transporter (using same config as demoRoutes)
 const transporter = nodemailer.createTransport({
@@ -211,3 +97,140 @@ const sendWelcomeEmail = async (email, firstName, company) => {
 };
 
 module.exports = router;
+
+
+// Validate payment token and return demo data
+router.get('/validate/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    console.log('🔍 Validating payment token:', token);
+    
+    const demoRequest = await DemoRequest.findOne({ 
+      paymentToken: token,
+      paymentLinkExpires: { $gt: new Date() } // Not expired
+    });
+    
+    if (!demoRequest) {
+      console.log('❌ Invalid or expired token:', token);
+      return res.status(404).json({ error: 'Invalid or expired payment link' });
+    }
+    
+    // Mark as clicked if first time
+    if (!demoRequest.paymentLinkClicked) {
+      demoRequest.paymentLinkClicked = true;
+      demoRequest.paymentLinkClickedAt = new Date();
+      await demoRequest.save();
+      console.log('👆 Payment link clicked for first time');
+    }
+    
+    // Return demo data for payment page
+    const responseData = {
+      email: demoRequest.email,
+      firstName: demoRequest.firstName,
+      lastName: demoRequest.lastName,
+      companyName: demoRequest.companyName,
+      phone: demoRequest.phone,
+      demoDate: demoRequest.createdAt,
+      demoId: demoRequest._id
+    };
+    
+    console.log('✅ Token validated for:', responseData.email);
+    res.json(responseData);
+    
+  } catch (error) {
+    console.error('❌ Error validating payment token:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create account from payment (TEST VERSION)
+router.post('/create-account', async (req, res) => {
+  try {
+    const { email, firstName, lastName, company, paymentLinkId } = req.body;
+    console.log('💳 Creating account for payment:', email);
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Account already exists for this email' 
+      });
+    }
+    
+  // Generate temporary password
+    const tempPassword = Math.random().toString(36).substring(2, 12);
+    
+    // Create user account
+    const user = new User({
+      email,
+      name: `${firstName} ${lastName}`,
+      businessName: company,
+      password: tempPassword,
+      accessLevel: 'paid',
+      subscriptionStatus: 'active',
+      companyName: company,
+      paymentCompleted: true,
+      accountCreatedFromPayment: true,
+      createdAt: new Date()
+    });
+    
+    await user.save();
+    
+    // Update demo request status
+    const demoRequest = await DemoRequest.findById(paymentLinkId);
+    if (demoRequest) {
+      demoRequest.status = 'closed_won';
+      demoRequest.userAccountCreated = user._id;
+      demoRequest.closedAt = new Date();
+      await demoRequest.save();
+    }
+    
+    // Send welcome email with login credentials
+    try {
+      await sendWelcomeEmail(email, firstName, company);
+      console.log('✅ Welcome email sent successfully');
+    } catch (emailError) {
+      console.error('⚠️ Account created but email failed:', emailError.message);
+      // Don't fail the whole request if email fails
+    }
+    
+    console.log('✅ Account created successfully:', email);
+    
+    res.json({
+    success: true,
+    message: 'Account created successfully',
+    tempPassword: tempPassword, // Add this back
+    userId: user._id
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating account:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create account' 
+    });
+  }
+});
+
+// Debug route - REMOVE after testing
+router.get('/debug-user/:email', async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.params.email });
+    if (!user) {
+      return res.json({ error: 'User not found' });
+    }
+    
+    res.json({
+      email: user.email,
+      name: user.name,
+      accessLevel: user.accessLevel,
+      subscriptionStatus: user.subscriptionStatus,
+      hasPassword: !!user.password,
+      passwordLength: user.password ? user.password.length : 0,
+      accountCreatedFromPayment: user.accountCreatedFromPayment
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
