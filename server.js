@@ -11,6 +11,7 @@ const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes')
 const demoRoutes = require('./routes/demoRoutes')
 const { protect, requireAccess } = require('./middlewares/authMiddleware')
+const paymentRoutes = require('./routes/paymentRoutes')
 
 
 const app = express();
@@ -65,6 +66,7 @@ app.use("/api/ai", aiRoutes)
 app.use("/api/products", productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api', demoRoutes)
+app.use('/api/payment', paymentRoutes);
 
 
 
