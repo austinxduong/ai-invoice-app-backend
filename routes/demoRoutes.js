@@ -92,13 +92,13 @@ const sendCustomerEmail = async (demo, paymentUrl) => {
         <div class="content">
             <p>Hi ${demo.firstName},</p>
             
-            <p>Thank you for your interest in our cannabis ERP platform for <strong>${demo.companyName}</strong>! We're excited to help you streamline your operations and ensure compliance.</p>
+            <p>Thank you for your interest in Quantum Invoice for <strong>${demo.companyName}</strong>! We're excited to help you streamline your operations and ensure compliance.</p>
             
             <div class="features">
                 <h3>🚀 Ready to get started right away?</h3>
                 <p>You can skip the wait and create your account today. Your subscription includes:</p>
                 <ul>
-                    <li>✅ Complete cannabis ERP system</li>
+                    <li>✅ Complete cannabis POS system</li>
                     <li>✅ Inventory & compliance management</li>
                     <li>✅ Point-of-sale integration</li>
                     <li>✅ Real-time reporting & analytics</li>
@@ -124,7 +124,7 @@ const sendCustomerEmail = async (demo, paymentUrl) => {
             
             <p>Best regards,<br>
             Austin X. Duong<br>
-            Cannabis ERP Solutions</p>
+            Quantum Invoice</p>
         </div>
         
         <div class="footer">
@@ -136,9 +136,9 @@ const sendCustomerEmail = async (demo, paymentUrl) => {
 </html>`;
 
   const mailOptions = {
-    from: `"Cannabis ERP Solutions" <${process.env.SMTP_USER}>`,
+    from: `"Quantum Invoice" <${process.env.SMTP_USER}>`,
     to: demo.email,
-    subject: `🌿 ${demo.firstName}, your cannabis ERP demo & account setup`,
+    subject: `🌿 ${demo.firstName}, your cannabis POS demo & account setup`,
     html: customerEmailTemplate
   };
 
@@ -216,9 +216,9 @@ const sendAdminNotification = async (demo, paymentUrl) => {
 router.get('/test-email', async (req, res) => {
   try {
     const testEmail = {
-      from: `"Cannabis ERP Test" <${process.env.SMTP_USER}>`,
+      from: `Quantum Invoice" <${process.env.SMTP_USER}>`,
       to: process.env.ADMIN_EMAIL,
-      subject: '🧪 Email Test from Cannabis ERP',
+      subject: '🧪 Email Test from Quantum Invoice',
       html: '<h2>✅ Email configuration is working!</h2><p>Your demo notification emails will work properly.</p>'
     };
     

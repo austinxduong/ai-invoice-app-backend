@@ -11,7 +11,7 @@ const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes')
 const demoRoutes = require('./routes/demoRoutes')
 const { protect, requireAccess } = require('./middlewares/authMiddleware')
-const paymentRoutes = require('./routes/paymentRoutes')
+const paymentRoutes = require('./routes/paymentRoutes');
 
 
 const app = express();
