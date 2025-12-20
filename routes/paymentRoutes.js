@@ -146,7 +146,7 @@ router.get('/validate/:token', async (req, res) => {
 // Create account from payment (TEST VERSION)
 router.post('/create-account', async (req, res) => {
   try {
-    const { email, firstName, lastName, company, paymentLinkId } = req.body;
+    const { email, firstName, lastName, company, password, paymentLinkId } = req.body;
     console.log('💳 Creating account for payment:', email);
     
     // Check if user already exists
@@ -158,15 +158,12 @@ router.post('/create-account', async (req, res) => {
       });
     }
     
-  // Generate temporary password
-    const tempPassword = Math.random().toString(36).substring(2, 12);
-    
-    // Create user account
+    // Create user account with custom password and email
     const user = new User({
-      email,
+      email, // Use the billing email from the form
       name: `${firstName} ${lastName}`,
       businessName: company,
-      password: tempPassword,
+      password: password, // Use the custom password (User model will hash it)
       accessLevel: 'paid',
       subscriptionStatus: 'active',
       companyName: company,
@@ -186,22 +183,12 @@ router.post('/create-account', async (req, res) => {
       await demoRequest.save();
     }
     
-    // Send welcome email with login credentials
-    try {
-      await sendWelcomeEmail(email, firstName, company);
-      console.log('✅ Welcome email sent successfully');
-    } catch (emailError) {
-      console.error('⚠️ Account created but email failed:', emailError.message);
-      // Don't fail the whole request if email fails
-    }
-    
     console.log('✅ Account created successfully:', email);
     
     res.json({
-    success: true,
-    message: 'Account created successfully',
-    tempPassword: tempPassword, // Add this back
-    userId: user._id
+      success: true,
+      message: 'Account created successfully',
+      userId: user._id
     });
     
   } catch (error) {
