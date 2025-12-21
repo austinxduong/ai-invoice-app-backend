@@ -3,8 +3,10 @@ const router = express.Router();
 const DemoRequest = require('../models/DemoRequest');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-
 const nodemailer = require('nodemailer');
+
+// ADD THIS - Stripe integration
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Email transporter (using same config as demoRoutes)
 const transporter = nodemailer.createTransport({
@@ -17,7 +19,7 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Welcome email function
+// Welcome email function (KEEP YOUR EXISTING ONE)
 const sendWelcomeEmail = async (email, firstName, company) => {
   const welcomeEmailTemplate = `
 <!DOCTYPE html>
@@ -36,7 +38,7 @@ const sendWelcomeEmail = async (email, firstName, company) => {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎉 Welcome to Quantum Invoice, ${firstName}!</h1>
+            <h1>🎉 Welcome to Cannabis ERP, ${firstName}!</h1>
         </div>
         
         <div class="content">
@@ -66,11 +68,11 @@ const sendWelcomeEmail = async (email, firstName, company) => {
             
             <p><strong>Need help getting started?</strong> Reply to this email or call us - we're here to help!</p>
             
-            <p>Welcome to the Quantum Invoice family!</p>
+            <p>Welcome to the Cannabis ERP family!</p>
             
             <p>Best regards,<br>
-            Austin X. Duong<br>
-            Quantum Invoice</p>
+            Austin Duong<br>
+            Cannabis ERP Solutions</p>
         </div>
         
         <div class="footer">
@@ -81,9 +83,9 @@ const sendWelcomeEmail = async (email, firstName, company) => {
 </html>`;
 
   const mailOptions = {
-    from: `"Quantum Invoice" <${process.env.SMTP_USER}>`,
+    from: `"Cannabis ERP Solutions" <${process.env.SMTP_USER}>`,
     to: email,
-    subject: `🎉 Welcome to Quantum Invoice! Your account is ready`,
+    subject: `🎉 Welcome to Cannabis ERP! Your account is ready`,
     html: welcomeEmailTemplate
   };
 
@@ -92,14 +94,11 @@ const sendWelcomeEmail = async (email, firstName, company) => {
     console.log('✅ Welcome email sent to:', email);
   } catch (error) {
     console.error('❌ Failed to send welcome email:', error);
-    throw error;
+    // Don't throw - we don't want to fail account creation if email fails
   }
 };
 
-module.exports = router;
-
-
-// Validate payment token and return demo data
+// KEEP YOUR EXISTING /validate/:token ROUTE (it's good!)
 router.get('/validate/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -107,7 +106,7 @@ router.get('/validate/:token', async (req, res) => {
     
     const demoRequest = await DemoRequest.findOne({ 
       paymentToken: token,
-      paymentLinkExpires: { $gt: new Date() } // Not expired
+      paymentLinkExpires: { $gt: new Date() }
     });
     
     if (!demoRequest) {
@@ -143,11 +142,104 @@ router.get('/validate/:token', async (req, res) => {
   }
 });
 
-// Create account from payment (TEST VERSION)
+// ADD THIS NEW ROUTE - Create Stripe Payment Intent
+router.post('/create-payment-intent', async (req, res) => {
+  try {
+    const { amount, currency, demoId, email } = req.body;
+    
+    console.log('💳 Creating payment intent for:', email);
+    
+    // Validate demo request exists
+    const demoRequest = await DemoRequest.findById(demoId);
+    if (!demoRequest) {
+      return res.status(404).json({ error: 'Demo request not found' });
+    }
+
+    // Create or retrieve Stripe customer
+    let customer;
+    const existingCustomers = await stripe.customers.list({
+      email: email,
+      limit: 1
+    });
+
+    if (existingCustomers.data.length > 0) {
+      customer = existingCustomers.data[0];
+      console.log('✅ Found existing Stripe customer:', customer.id);
+    } else {
+      customer = await stripe.customers.create({
+        email: email,
+        name: `${demoRequest.firstName} ${demoRequest.lastName}`,
+        metadata: {
+          demoId: demoId,
+          companyName: demoRequest.companyName
+        }
+      });
+      console.log('✅ Created new Stripe customer:', customer.id);
+    }
+
+    // Create payment intent
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: amount, // Amount in cents (29900 = $299.00)
+      currency: currency,
+      customer: customer.id,
+      metadata: {
+        demoId: demoId,
+        email: email,
+        companyName: demoRequest.companyName
+      },
+      description: `Cannabis ERP Platform - Monthly Subscription`,
+      receipt_email: email,
+    });
+
+    console.log('✅ Payment intent created:', paymentIntent.id);
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      customerId: customer.id
+    });
+  } catch (error) {
+    console.error('❌ Payment intent creation error:', error);
+    res.status(500).json({ error: error.message || 'Failed to create payment intent' });
+  }
+});
+
+// UPDATE YOUR EXISTING /create-account ROUTE
 router.post('/create-account', async (req, res) => {
   try {
-    const { email, firstName, lastName, company, password, paymentLinkId } = req.body;
+    const { 
+      email, 
+      firstName, 
+      lastName, 
+      company, 
+      password, 
+      paymentLinkId,
+      paymentIntentId,  // NEW - from Stripe
+      paymentData       // NEW - from Stripe
+    } = req.body;
+    
     console.log('💳 Creating account for payment:', email);
+    
+    // If paymentIntentId exists, verify payment with Stripe
+    if (paymentIntentId) {
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        
+        if (paymentIntent.status !== 'succeeded') {
+          return res.status(400).json({ 
+            success: false, 
+            error: 'Payment not completed. Please try again.' 
+          });
+        }
+        
+        console.log('✅ Stripe payment verified:', paymentIntentId);
+      } catch (stripeError) {
+        console.error('❌ Stripe verification error:', stripeError);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Could not verify payment. Please contact support.' 
+        });
+      }
+    }
     
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -160,19 +252,21 @@ router.post('/create-account', async (req, res) => {
     
     // Create user account with custom password and email
     const user = new User({
-      email, // Use the billing email from the form
+      email,
       name: `${firstName} ${lastName}`,
       businessName: company,
-      password: password, // Use the custom password (User model will hash it)
+      password: password, // User model will hash it
       accessLevel: 'paid',
       subscriptionStatus: 'active',
       companyName: company,
       paymentCompleted: true,
       accountCreatedFromPayment: true,
+      stripeCustomerId: paymentData?.stripeCustomerId, // Store Stripe customer ID
       createdAt: new Date()
     });
     
     await user.save();
+    console.log('✅ User account created:', email);
     
     // Update demo request status
     const demoRequest = await DemoRequest.findById(paymentLinkId);
@@ -181,9 +275,17 @@ router.post('/create-account', async (req, res) => {
       demoRequest.userAccountCreated = user._id;
       demoRequest.closedAt = new Date();
       await demoRequest.save();
+      console.log('✅ Demo request updated to closed_won');
     }
     
-    console.log('✅ Account created successfully:', email);
+    // Send welcome email
+    try {
+      await sendWelcomeEmail(email, firstName, company);
+    } catch (emailError) {
+      console.error('⚠️ Welcome email failed (but account created):', emailError);
+    }
+    
+    console.log('✅ Account creation complete for:', email);
     
     res.json({
       success: true,
@@ -200,7 +302,7 @@ router.post('/create-account', async (req, res) => {
   }
 });
 
-// Debug route - REMOVE after testing
+// KEEP YOUR DEBUG ROUTE (optional - for testing)
 router.get('/debug-user/:email', async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email });
@@ -215,9 +317,12 @@ router.get('/debug-user/:email', async (req, res) => {
       subscriptionStatus: user.subscriptionStatus,
       hasPassword: !!user.password,
       passwordLength: user.password ? user.password.length : 0,
-      accountCreatedFromPayment: user.accountCreatedFromPayment
+      accountCreatedFromPayment: user.accountCreatedFromPayment,
+      stripeCustomerId: user.stripeCustomerId || 'Not set'
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+module.exports = router;
