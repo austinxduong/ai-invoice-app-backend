@@ -36,7 +36,7 @@ const sendWelcomeEmail = async (email, firstName, company) => {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎉 Welcome to Cannabis ERP, ${firstName}!</h1>
+            <h1>🎉 Welcome to Quantum Invoice, ${firstName}!</h1>
         </div>
         
         <div class="content">
@@ -66,11 +66,11 @@ const sendWelcomeEmail = async (email, firstName, company) => {
             
             <p><strong>Need help getting started?</strong> Reply to this email or call us - we're here to help!</p>
             
-            <p>Welcome to the Cannabis ERP family!</p>
+            <p>Welcome to the Quantum Invoice family!</p>
             
             <p>Best regards,<br>
-            Austin Duong<br>
-            Cannabis ERP Solutions</p>
+            Austin X. Duong<br>
+            Quantum Invoice</p>
         </div>
         
         <div class="footer">
@@ -81,9 +81,9 @@ const sendWelcomeEmail = async (email, firstName, company) => {
 </html>`;
 
   const mailOptions = {
-    from: `"Cannabis ERP Solutions" <${process.env.SMTP_USER}>`,
+    from: `"Quantum Invoice" <${process.env.SMTP_USER}>`,
     to: email,
-    subject: `🎉 Welcome to Cannabis ERP! Your account is ready`,
+    subject: `🎉 Welcome to Quantum Invoice! Your account is ready`,
     html: welcomeEmailTemplate
   };
 
