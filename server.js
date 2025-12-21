@@ -58,6 +58,7 @@ connectDB();
 
 // middleware
 app.use(express.json());
+console.log('Mongo URI:', process.env.MONGO_URI);
 
 // routes
 app.use("/api/auth", authRoutes);
