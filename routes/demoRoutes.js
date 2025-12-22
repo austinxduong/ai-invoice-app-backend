@@ -38,6 +38,7 @@ router.post('/demo-requests', async (req, res) => {
 
     // Generate payment URL
     const paymentUrl = `${process.env.FRONTEND_URL}/pay/${paymentToken}`;
+    console.log('📧 Payment URL being sent:', paymentUrl);
 
     // Send emails
     try {
