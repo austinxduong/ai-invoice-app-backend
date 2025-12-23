@@ -1,178 +1,193 @@
+// backend/models/Product.js (Updated with Multi-Tenancy)
 const mongoose = require('mongoose');
 
-const ProductSchema = new mongoose.Schema({
-    name: {
-        type:String,
-        required: true,
-        trim: true
-    },
-    sku: {
-        type:String,
-        required:true,
-        unique:true,
-        trim:true
-    },
-
-    category: {
-        type:String,
-        required:true,
-        enum:['flower', 'edible', 'concentrate', 'topical', 'accessory', 'pre-roll']
-    },
-    subcategory: {
-        type:String,
-        enum: {
-            values:['indica', 'sativa', 'hybrid', 'cbd','high-cbd','balanced','other'],
-            message:'Invalid subcategory'
-        }
-    },
-
-    cannabinoids: {
-        thcPercentage: {
-            type:Number,
-            min:0,
-            max:100,
-            default:0
-        },
-        cbdPercentage: {
-            type: Number,
-            min: 0,
-            max: 100,
-            default:0
-        },
-        thcMg: {
-            type:Number, // for edibles (total thc in mg)
-            min:0
-        },
-        cbdMg: {
-            type:Number, // for edibles (total CBD in mg)
-            min:0
-        }
-    },
-
-    //pricing and inventory
-    pricing:[{
-        unit:{
-            type:String,
-            required: true,
-            enum:['gram', 'eighth', 'quarter', 'half', 'ounce', 'each', 'package']
-        },
-    weight: {
-            type:Number, // weight in grams
-            required: true
-        },
-    price: {
-            type:Number,
-            required: true,
-            min:0
-        }
-    }],
-
-    inventory: {
-        currentStock: {
-            type:Number,
-            required: true,
-            min: 0,
-            default:0
-        },
-        unit:{
-            type:String,
-            required:true,
-            enum:['gram', 'each', 'package'],
-            default:'each'
-        },
-        lowStockAlert: {
-            type: Number,
-            default: 5
-        }
-    },
-
-    // product details
-    description:{
-        type:String,
-        maxlength:1000
-    },
-    effects:[{
-        type:String,
-        enum:['relaxed', 'euphoric', 'uplifted', 'creative', 'focused', 'sleepy', 'energetic', 'happy']
-    }],
-    flavors:[{
-        type:String
-    }],
-
-    //compliance information
-    compliance:{
-        batchNumber: {
-            type:String,
-            required:true
-        },
-        labTested: {
-            type:Boolean,
-            default: false
-        },
-        testResults: {
-            lab:String,
-            passedTest:Boolean,
-            pesticides:Boolean,
-            residualSolvents:Boolean,
-            heavyMetals:Boolean,
-            microbials:Boolean
-        },
-        harvestDate:Date,
-        packagedDate:Date,
-        expirationDate:Date,
-        licensedProducer:String,
-        stateTrackingId:String // for seed-to-sale tracking
-    },
-    
-    //business information
-    supplier: {
-        name:String,
-        contact:String,
-        license:String
-    },
-
-    //product status
-    isActive: {
-        type:Boolean,
-        default:true
-    },
-    isAvailable:{
-        type:Boolean,
-        default:true
-    },
-
-    //metadata
-    createdBy:{
-        type:mongoose.Schema.Types.ObjectId,
-        ref:'User',
-        required:true
-    },
-    images:[{
-        url:String,
-        alt:String
-    }]
-},{
-    timestamps:true
-});
-
-//indexes for better query performance
-ProductSchema.index({category:1,subcategory:1});
-ProductSchema.index({'compliance.batchNumber':1});
-ProductSchema.index({sku:1});
-ProductSchema.index({name:'text', description:'text'});
-
-//virtual for calculating inventory value
-ProductSchema.virtual('inventoryValue').get(function(){
-    if(this.pricing.length > 0) {
-        const basePrice = this.pricing[0].price;
-        return this.inventory.currentStock * basePrice
+const productSchema = new mongoose.Schema({
+  // CRITICAL: Multi-tenancy field
+  organizationId: {
+    type: String,
+    required: true,
+    index: true
+  },
+  
+  // Product Information
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  sku: {
+    type: String,
+    required: true,
+    trim: true,
+    uppercase: true
+  },
+  description: {
+    type: String,
+    default: ''
+  },
+  
+  // Categorization
+  category: {
+    type: String,
+    required: true,
+    enum: ['flower', 'edibles', 'concentrates', 'topicals', 'accessories', 'other'],
+    default: 'other'
+  },
+  subcategory: {
+    type: String,
+    default: ''
+  },
+  
+  // Pricing
+  price: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  cost: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  
+  // Inventory
+  stockQuantity: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  lowStockThreshold: {
+    type: Number,
+    default: 10,
+    min: 0
+  },
+  unit: {
+    type: String,
+    default: 'unit',
+    enum: ['unit', 'gram', 'ounce', 'pound', 'kilogram', 'liter', 'milliliter']
+  },
+  
+  // Cannabis-Specific Fields
+  thcContent: {
+    type: Number,
+    default: null,
+    min: 0,
+    max: 100
+  },
+  cbdContent: {
+    type: Number,
+    default: null,
+    min: 0,
+    max: 100
+  },
+  strain: {
+    type: String,
+    default: null
+  },
+  strainType: {
+    type: String,
+    enum: ['indica', 'sativa', 'hybrid', null],
+    default: null
+  },
+  
+  // Status
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  
+  // Images
+  images: [{
+    url: String,
+    isPrimary: {
+      type: Boolean,
+      default: false
     }
-    return 0;
+  }],
+  
+  // Audit Trail
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  updatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-//method to check if product is in stock
-ProductSchema.methods.isInStock = function(requestedQuantity=1) {
-    return this.inventory.currentStock >= requestedQuantity;
-}
+// Compound Indexes for Multi-Tenancy
+// SKU must be unique PER organization (not globally)
+productSchema.index({ organizationId: 1, sku: 1 }, { unique: true });
+productSchema.index({ organizationId: 1, category: 1 });
+productSchema.index({ organizationId: 1, isActive: 1 });
+productSchema.index({ organizationId: 1, name: 'text' }); // Text search within organization
 
-module.exports = mongoose.model('Product', ProductSchema);
+// Virtual for profit margin
+productSchema.virtual('profitMargin').get(function() {
+  if (this.cost === 0) return 0;
+  return ((this.price - this.cost) / this.cost) * 100;
+});
+
+// Virtual for stock status
+productSchema.virtual('stockStatus').get(function() {
+  if (this.stockQuantity === 0) return 'out_of_stock';
+  if (this.stockQuantity <= this.lowStockThreshold) return 'low_stock';
+  return 'in_stock';
+});
+
+// Pre-save middleware
+productSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
+// Methods
+productSchema.methods.updateStock = async function(quantity, operation = 'add') {
+  if (operation === 'add') {
+    this.stockQuantity += quantity;
+  } else if (operation === 'subtract') {
+    this.stockQuantity = Math.max(0, this.stockQuantity - quantity);
+  } else if (operation === 'set') {
+    this.stockQuantity = quantity;
+  }
+  
+  await this.save();
+  return this.stockQuantity;
+};
+
+productSchema.methods.isLowStock = function() {
+  return this.stockQuantity <= this.lowStockThreshold && this.stockQuantity > 0;
+};
+
+productSchema.methods.isOutOfStock = function() {
+  return this.stockQuantity === 0;
+};
+
+// Static methods
+productSchema.statics.getLowStockProducts = async function(organizationId) {
+  return await this.find({
+    organizationId: organizationId,
+    isActive: true,
+    stockQuantity: { $lte: this.schema.path('lowStockThreshold').default() }
+  });
+};
+
+productSchema.statics.getOutOfStockProducts = async function(organizationId) {
+  return await this.find({
+    organizationId: organizationId,
+    isActive: true,
+    stockQuantity: 0
+  });
+};
+
+module.exports = mongoose.model('Product', productSchema);

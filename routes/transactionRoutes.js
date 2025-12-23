@@ -2,11 +2,12 @@ const express = require('express');
 const Transaction = require('../models/Transaction');
 const Product = require('../models/Product');
 const { protect, requireAccess } = require('../middlewares/authMiddleware');
+const { requireAuth } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
 // POST /api/transactions - Create new transaction
-router.post('/', protect, requireAccess, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
     try {
         const {
             transactionId,
@@ -22,7 +23,12 @@ router.post('/', protect, requireAccess, async (req, res) => {
         // Convert item product IDs to ObjectIds and validate products exist
         const transactionItems = [];
         for (let item of items) {
-            const product = await Product.findById(item.id);
+            // CRITICAL: Only find products from this organization
+            const product = await Product.findOne({
+                _id: item.id,
+                organizationId: req.organizationId  // ← Security check
+            });
+            
             if (!product) {
                 return res.status(404).json({ 
                     message: `Product not found: ${item.name}` 
@@ -52,6 +58,7 @@ router.post('/', protect, requireAccess, async (req, res) => {
         }
 
         const transaction = new Transaction({
+            organizationId: req.organizationId,  // ← Tag with organization
             transactionId,
             items: transactionItems,
             totals,
@@ -61,10 +68,10 @@ router.post('/', protect, requireAccess, async (req, res) => {
             customerInfo,
             receiptData,
             compliance: {
-                employeeId: req.user._id,
-                registerId: 'POS-001', // You can make this dynamic
+                employeeId: req.userId,          // ← Use new auth
+                registerId: 'POS-001',
             },
-            createdBy: req.user._id
+            createdBy: req.userId                // ← Track creator
         });
 
         await transaction.save();
@@ -84,7 +91,7 @@ router.post('/', protect, requireAccess, async (req, res) => {
 });
 
 // GET /api/transactions - Get transactions with filtering
-router.get('/', protect, requireAccess, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
     try {
         const {
             startDate,
@@ -98,90 +105,76 @@ router.get('/', protect, requireAccess, async (req, res) => {
             sortOrder = 'desc'
         } = req.query;
 
-        // Build filter object
-        const filter = { isActive: true };
+        // CRITICAL: Filter by organizationId
+        const filter = { 
+            organizationId: req.organizationId,  // ← Only this organization
+            isActive: true 
+        };
         
-if (startDate && endDate) {
-    console.log('🔍 Backend: Using localDateString for filtering');
-    
-    // Convert to MM/DD/YYYY format
-    const startTargetDate = new Date(startDate).toLocaleDateString('en-US');
-    const endTargetDate = new Date(endDate).toLocaleDateString('en-US');
-    
-    console.log('🔍 Backend: Date range filter:', {
-        startDate: startDate,
-        endDate: endDate,
-        startTargetDate: startTargetDate,
-        endTargetDate: endTargetDate
-    });
-    
-    // Get ALL transactions to see what we have
-    const allTransactions = await Transaction.find({ 
-        isActive: true,
-        'receiptData.localDateString': { $exists: true }
-    }).select('transactionId receiptData.localDateString paymentMethod').limit(10);
-    
-    console.log('🔍 Backend: ALL transactions in database:');
-    allTransactions.forEach(txn => {
-        console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}" (${txn.paymentMethod})`);
-    });
-    
-    // Test different filter approaches
-    console.log('🔍 Backend: Testing filter approaches...');
-    
-    // Approach 1: Exact match for single day
-    if (startTargetDate === endTargetDate) {
-        console.log('🔍 Backend: Single day - exact match filter');
-        filter['receiptData.localDateString'] = startTargetDate;
-        
-        // Test this filter
-        const testResult = await Transaction.find({
-            isActive: true,
-            'receiptData.localDateString': startTargetDate
-        }).select('transactionId receiptData.localDateString');
-        
-        console.log(`🔍 Backend: Exact match test found ${testResult.length} transactions:`);
-        testResult.forEach(txn => {
-            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
-        });
-        
-    } else {
-        console.log('🔍 Backend: Date range filter');
-        // For date ranges, we need a different approach with string dates
-        const allDatesInRange = [];
-        const currentDate = new Date(startDate);
-        const endDateObj = new Date(endDate);
-        
-        while (currentDate <= endDateObj) {
-            allDatesInRange.push(currentDate.toLocaleDateString('en-US'));
-            currentDate.setDate(currentDate.getDate() + 1);
+        if (startDate && endDate) {
+            console.log('🔍 Backend: Using localDateString for filtering');
+            
+            const startTargetDate = new Date(startDate).toLocaleDateString('en-US');
+            const endTargetDate = new Date(endDate).toLocaleDateString('en-US');
+            
+            console.log('🔍 Backend: Date range filter:', {
+                startDate: startDate,
+                endDate: endDate,
+                startTargetDate: startTargetDate,
+                endTargetDate: endTargetDate
+            });
+            
+            // Get ALL transactions for this organization
+            const allTransactions = await Transaction.find({ 
+                organizationId: req.organizationId,  // ← Filtered
+                isActive: true,
+                'receiptData.localDateString': { $exists: true }
+            }).select('transactionId receiptData.localDateString paymentMethod').limit(10);
+            
+            console.log('🔍 Backend: Transactions in database for this org:');
+            allTransactions.forEach(txn => {
+                console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}" (${txn.paymentMethod})`);
+            });
+            
+            if (startTargetDate === endTargetDate) {
+                console.log('🔍 Backend: Single day - exact match filter');
+                filter['receiptData.localDateString'] = startTargetDate;
+                
+                const testResult = await Transaction.find({
+                    organizationId: req.organizationId,  // ← Filtered
+                    isActive: true,
+                    'receiptData.localDateString': startTargetDate
+                }).select('transactionId receiptData.localDateString');
+                
+                console.log(`🔍 Backend: Exact match test found ${testResult.length} transactions:`);
+                testResult.forEach(txn => {
+                    console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
+                });
+                
+            } else {
+                console.log('🔍 Backend: Date range filter');
+                const allDatesInRange = [];
+                const currentDate = new Date(startDate);
+                const endDateObj = new Date(endDate);
+                
+                while (currentDate <= endDateObj) {
+                    allDatesInRange.push(currentDate.toLocaleDateString('en-US'));
+                    currentDate.setDate(currentDate.getDate() + 1);
+                }
+                
+                console.log('🔍 Backend: Dates in range:', allDatesInRange);
+                filter['receiptData.localDateString'] = { $in: allDatesInRange };
+            }
         }
-        
-        console.log('🔍 Backend: Dates in range:', allDatesInRange);
-        
-        filter['receiptData.localDateString'] = { $in: allDatesInRange };
-    }
-}
         
         if (status) filter.status = status;
         if (paymentMethod) filter.paymentMethod = paymentMethod;
         if (employeeId) filter['compliance.employeeId'] = employeeId;
 
-        // 🐛 DEBUG: Log final filter before actual query
-        console.log('🔍 Backend: Final filter object before query:', JSON.stringify(filter, null, 2));
+        console.log('🔍 Backend: Final filter object:', JSON.stringify(filter, null, 2));
 
-        // 🐛 DEBUG: Test the exact query without pagination first
         const testActualQuery = await Transaction.find(filter).select('transactionId receiptData.localDateString');
-        console.log(`🔍 Backend: Actual query (no pagination) found ${testActualQuery.length} transactions:`);
-        testActualQuery.forEach(txn => {
-            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}"`);
-        });
-
-        console.log('🔍 Backend: Query parameters:', { 
-            skip: (parseInt(page) - 1) * parseInt(limit), 
-            limit: parseInt(limit), 
-            sort: { [sortBy]: sortOrder === 'desc' ? -1 : 1 } 
-        });
+        console.log(`🔍 Backend: Actual query found ${testActualQuery.length} transactions`);
 
         // Calculate pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -195,12 +188,7 @@ if (startDate && endDate) {
             .populate('compliance.employeeId', 'firstName lastName')
             .populate('createdBy', 'firstName lastName');
 
-        // 🐛 DEBUG: Check final paginated query results
-        console.log(`🔍 Backend: Final paginated query found ${transactions.length} transactions:`);
-        transactions.forEach(txn => {
-            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}" (status: ${txn.status})`);
-        });
-        console.log(`🔍 Backend: Total count: ${await Transaction.countDocuments(filter)}`);
+        console.log(`🔍 Backend: Final paginated query found ${transactions.length} transactions`);
 
         const total = await Transaction.countDocuments(filter);
 
@@ -223,9 +211,12 @@ if (startDate && endDate) {
 });
 
 // GET /api/transactions/:id - Get single transaction
-router.get('/:id', protect, requireAccess, async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
     try {
-        const transaction = await Transaction.findById(req.params.id)
+        const transaction = await Transaction.findOne({
+            _id: req.params.id,
+            organizationId: req.organizationId  // ← Security check
+        })
             .populate('compliance.employeeId', 'firstName lastName')
             .populate('createdBy', 'firstName lastName')
             .populate('items.productId');
@@ -245,7 +236,7 @@ router.get('/:id', protect, requireAccess, async (req, res) => {
 });
 
 // GET /api/transactions/reports/summary - Get sales summary for date range
-router.get('/reports/summary', protect, requireAccess, async (req, res) => {
+router.get('/reports/summary', requireAuth, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
         
@@ -255,7 +246,12 @@ router.get('/reports/summary', protect, requireAccess, async (req, res) => {
             });
         }
 
-        const summary = await Transaction.getSalesReport(startDate, endDate);
+        // Note: You'll need to update getSalesReport method to accept organizationId
+        const summary = await Transaction.getSalesReport(
+            startDate, 
+            endDate, 
+            req.organizationId  // ← Pass organization filter
+        );
         
         res.json({
             summary: summary[0] || {
@@ -278,12 +274,11 @@ router.get('/reports/summary', protect, requireAccess, async (req, res) => {
 });
 
 // GET /api/transactions/reports/daily - Get daily sales data
-router.get('/reports/daily', protect, requireAccess, async (req, res) => {
+router.get('/reports/daily', requireAuth, async (req, res) => {
     try {
         const { date } = req.query;
         const targetDate = date ? new Date(date) : new Date();
         
-        // Start and end of the day
         const startOfDay = new Date(targetDate);
         startOfDay.setHours(0, 0, 0, 0);
         
@@ -293,6 +288,7 @@ router.get('/reports/daily', protect, requireAccess, async (req, res) => {
         const dailyData = await Transaction.aggregate([
             {
                 $match: {
+                    organizationId: req.organizationId,  // ← Filter by organization
                     createdAt: { $gte: startOfDay, $lte: endOfDay },
                     status: 'completed',
                     isActive: true
@@ -338,11 +334,14 @@ router.get('/reports/daily', protect, requireAccess, async (req, res) => {
 });
 
 // PUT /api/transactions/:id/refund - Process refund
-router.put('/:id/refund', protect, requireAccess, async (req, res) => {
+router.put('/:id/refund', requireAuth, async (req, res) => {
     try {
         const { amount, reason } = req.body;
         
-        const transaction = await Transaction.findById(req.params.id);
+        const transaction = await Transaction.findOne({
+            _id: req.params.id,
+            organizationId: req.organizationId  // ← Security check
+        });
         
         if (!transaction) {
             return res.status(404).json({ message: 'Transaction not found' });
@@ -362,7 +361,7 @@ router.put('/:id/refund', protect, requireAccess, async (req, res) => {
             amount,
             reason,
             refundedAt: new Date(),
-            refundedBy: req.user._id
+            refundedBy: req.userId  // ← Track who refunded
         };
 
         await transaction.save();

@@ -7,15 +7,19 @@ const {
     deleteInvoice,
 } = require("../controllers/invoiceController.js");
 const { protect } = require("../middlewares/authMiddleware.js");
+const { requireAuth } = require("../middlewares/auth.middleware.js");
 
 const router = express.Router();
 
-router.route("/").post(protect, createInvoice).get(protect, getInvoices);
+// Use the NEW requireAuth middleware for multi-tenancy
+router.route("/")
+    .post(requireAuth, createInvoice)
+    .get(requireAuth, getInvoices);
 
 router  
     .route("/:id")
-    .get(protect, getInvoiceById)
-    .put(protect, updateInvoice)
-    .delete(protect, deleteInvoice)
+    .get(requireAuth, getInvoiceById)
+    .put(requireAuth, updateInvoice)
+    .delete(requireAuth, deleteInvoice)
 
 module.exports = router;

@@ -25,6 +25,7 @@ exports.createInvoice = async (req, res) => {
         const total = subtotal + taxTotal;
 
         const invoice = new Invoice({
+            organizationId: req.organizationId,  // ← CRITICAL: Tag with organization
             user,
             invoiceNumber,
             invoiceDate,
@@ -37,6 +38,7 @@ exports.createInvoice = async (req, res) => {
             subtotal,
             taxTotal,
             total,
+            createdBy: req.user._id  // ← Track who created it
         });
         
         await invoice.save();
@@ -49,28 +51,35 @@ exports.createInvoice = async (req, res) => {
     }
 };
 
-// get all invoices of logged inuser
+// get all invoices for logged in user's organization
 exports.getInvoices = async(req, res) => {
     try {
-        const invoices = await Invoice.find().populate("user", "name email");
+        // CRITICAL: Only get invoices from user's organization
+        const invoices = await Invoice.find({
+            organizationId: req.organizationId  // ← Filter by organization
+        }).populate("user", "name email");
+        
         res.json(invoices);
     } catch (error) {
         res 
             .status(500)
-            .json({ message: "Error fetching invoice", error: error.message });
+            .json({ message: "Error fetching invoices", error: error.message });
     }
 };
 
 // get single invoice by ID
 exports.getInvoiceById = async (req, res) => {
     try {
-        const invoice = await Invoice.findById(req.params.id).populate("user", "name email");
-        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+        // CRITICAL: Verify invoice belongs to user's organization
+        const invoice = await Invoice.findOne({
+            _id: req.params.id,
+            organizationId: req.organizationId  // ← Security check
+        }).populate("user", "name email");
+        
+        if (!invoice) {
+            return res.status(404).json({ message: "Invoice not found" });
+        }
 
-            // Check if the invoice belongs to the user
-        if (invoice.user._id.toString() !== req.user.id) {
-            return res.status(401).json({ message: "Not authorized" });
-            }
         res.json(invoice);
         
     } catch (error) {
@@ -93,12 +102,12 @@ exports.updateInvoice = async (req, res) => {
             notes,
             paymentTerms,
             status,
-            } = req.body
+        } = req.body
 
-            let subtotal = 0;
-            let taxTotal = 0;
-            if (items && items.length > 0) {
-                items.forEach((item) => { 
+        let subtotal = 0;
+        let taxTotal = 0;
+        if (items && items.length > 0) {
+            items.forEach((item) => { 
                 subtotal += item.unitPrice * item.quantity;
                 taxTotal += ((item.unitPrice * item.quantity) * (item.taxPercent || 0)) / 100;
             });
@@ -106,8 +115,12 @@ exports.updateInvoice = async (req, res) => {
 
         const total = subtotal + taxTotal;
 
-        const updatedInvoice = await Invoice.findByIdAndUpdate(
-            req.params.id,
+        // CRITICAL: Only update if invoice belongs to user's organization
+        const updatedInvoice = await Invoice.findOneAndUpdate(
+            {
+                _id: req.params.id,
+                organizationId: req.organizationId  // ← Security check
+            },
             {
                 invoiceNumber,
                 invoiceDate,
@@ -125,7 +138,10 @@ exports.updateInvoice = async (req, res) => {
             { new: true } 
         );
 
-        if (!updatedInvoice) return res.status(404).json({ message: "Invoice not found" });
+        if (!updatedInvoice) {
+            return res.status(404).json({ message: "Invoice not found" });
+        }
+        
         res.json(updatedInvoice);
     } catch (error) {
         res 
@@ -137,8 +153,16 @@ exports.updateInvoice = async (req, res) => {
 // delete a single invoice by its id
 exports.deleteInvoice = async (req, res) => {
     try {
-        const invoice = await Invoice.findByIdAndDelete(req.params.id);
-        if (!invoice) return res.status(404).json({ message: "Invoice not found"});
+        // CRITICAL: Only delete if invoice belongs to user's organization
+        const invoice = await Invoice.findOneAndDelete({
+            _id: req.params.id,
+            organizationId: req.organizationId  // ← Security check
+        });
+        
+        if (!invoice) {
+            return res.status(404).json({ message: "Invoice not found"});
+        }
+        
         res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
         res 

@@ -11,7 +11,7 @@ const parseInvoiceFromText = async (req, res) => {
     }
     try {
         const prompt = `
-        You are an expert invoice data extraction AI. Analayze the following text and extract the relevant information to create an invoice.
+        You are an expert invoice data extraction AI. Analyze the following text and extract the relevant information to create an invoice.
         The output MUST be a valid JSON object.
 
         The JSON object should have the following structure:
@@ -71,7 +71,11 @@ const generateReminderEmail = async (req, res) => {
     }
 
     try {
-        const invoice = await Invoice.findById(invoiceId);
+        // CRITICAL: Only find invoice from user's organization
+        const invoice = await Invoice.findOne({
+            _id: invoiceId,
+            organizationId: req.organizationId  // ← Security check
+        });
 
         if (!invoice) {
             return res.status(404).json({ message: "Invoice not found" });
@@ -82,7 +86,7 @@ const generateReminderEmail = async (req, res) => {
         
         Use the following details to personalize the email:
         - Client Name: ${invoice.billTo.clientName}
-        - Invoice Number ${invoice.invoiceNumber}
+        - Invoice Number: ${invoice.invoiceNumber}
         - Amount Due: ${invoice.total.toFixed(2)}
         - Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}
 
@@ -98,13 +102,16 @@ const generateReminderEmail = async (req, res) => {
 
     } catch (error) {
         console.error("Error generating reminder with AI:", error);
-        res.status(500).json({ message: "Failed to parse invoice data from text.", details: error.message })
+        res.status(500).json({ message: "Failed to generate reminder email.", details: error.message })
     }
 };
 
 const getDashboardSummary = async (req, res) => {
     try {
-        const invoices = await Invoice.find({ user: req.user.id })
+        // CRITICAL: Only get invoices from user's organization
+        const invoices = await Invoice.find({ 
+            organizationId: req.organizationId  // ← Filter by organization
+        });
         
         if (invoices.length === 0) {
             return res.status(200).json({ insights: ["No invoice data available to generate insights."] })
@@ -122,7 +129,7 @@ const getDashboardSummary = async (req, res) => {
         - Total unpaid/pending invoices: ${unpaidInvoices.length}
         - Total revenue from paid invoices: ${totalRevenue.toFixed(2)}
         - Total outstanding amount from unpaid/pending invoices: ${totalOutstanding.toFixed(2)}
-        - Recent invoices (last 5): ${invoices.slice(0, 5).map(inv => `Invoice #${inv.invoiceNumber} for ${inv.total.toFixed(2)} with status ${inv.status}`) .join(', ')}
+        - Recent invoices (last 5): ${invoices.slice(0, 5).map(inv => `Invoice #${inv.invoiceNumber} for ${inv.total.toFixed(2)} with status ${inv.status}`).join(', ')}
         `;
 
         const prompt = `
@@ -151,8 +158,8 @@ const getDashboardSummary = async (req, res) => {
         res.status(200).json(parsedData);
 
     } catch (error) {
-        console.error("Error dashboard summary with AI:", error);
-        res.status(500).json({ message: "Failed to parse invoice data from text.", details: error.message })
+        console.error("Error generating dashboard summary with AI:", error);
+        res.status(500).json({ message: "Failed to generate dashboard summary.", details: error.message })
     }
 };
 

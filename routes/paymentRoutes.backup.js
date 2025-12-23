@@ -1,14 +1,14 @@
-// backend/routes/payment.routes.js (Updated with Organization)
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const DemoRequest = require('../models/DemoRequest');
 const User = require('../models/User');
-const Organization = require('../models/Organization');
-const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 
-// Email transporter
+// ADD THIS - Stripe integration
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+// Email transporter (using same config as demoRoutes)
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: 587,
@@ -19,8 +19,8 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Welcome email function
-const sendWelcomeEmail = async (email, firstName, company, organizationId, loginEmail) => {
+// Welcome email function (KEEP YOUR EXISTING ONE)
+const sendWelcomeEmail = async (email, firstName, company) => {
   const welcomeEmailTemplate = `
 <!DOCTYPE html>
 <html>
@@ -31,7 +31,6 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
         .header { background: linear-gradient(135deg, #059669, #047857); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
         .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; }
-        .customer-code { background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #059669; }
         .cta-button { display: inline-block; background: #059669; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
         .footer { background: #f8f9fa; padding: 15px; border-radius: 0 0 8px 8px; text-align: center; font-size: 12px; color: #666; }
     </style>
@@ -45,23 +44,13 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
         <div class="content">
             <p>Hi ${firstName},</p>
             
-            <p>Congratulations! Your payment has been processed successfully and your <strong>${company}</strong> account is now active.</p>
-            
-            <div class="customer-code">
-                <h3 style="margin-top: 0;">📋 Your Customer Code:</h3>
-                <p style="font-size: 18px; font-weight: bold; color: #059669; margin: 10px 0;">${organizationId}</p>
-                <p style="font-size: 12px; color: #666; margin-bottom: 0;">
-                    Save this code - you may need it when contacting support or inviting team members.
-                </p>
-            </div>
+            <p>Congratulations! Your payment has been processed successfully and your ${company} account is now active.</p>
             
             <h3>🔑 Your Login Information:</h3>
             <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                <p><strong>Login Email:</strong> ${loginEmail}<br>
+                <p><strong>Email:</strong> ${email}<br>
                 <strong>Password:</strong> [The password you created during signup]</p>
             </div>
-            
-            <p><strong>Billing Email:</strong> ${email} (invoices will be sent here)</p>
             
             <div style="text-align: center;">
                 <a href="${process.env.FRONTEND_URL}/login" class="cta-button">
@@ -73,7 +62,6 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
             <ul>
                 <li>✅ Log in to your new account</li>
                 <li>✅ Complete your company profile setup</li>
-                <li>✅ Invite team members to collaborate</li>
                 <li>✅ Import your existing data (if any)</li>
                 <li>✅ Our team will contact you for onboarding within 24 hours</li>
             </ul>
@@ -88,8 +76,7 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
         </div>
         
         <div class="footer">
-            <p>Customer Code: ${organizationId} | Company: ${company}</p>
-            <p>If you have any questions, just reply to this email or contact support.</p>
+            <p>This account was created for ${company}. If you have any questions, just reply to this email.</p>
         </div>
     </div>
 </body>
@@ -98,7 +85,7 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
   const mailOptions = {
     from: `"Cannabis ERP Solutions" <${process.env.SMTP_USER}>`,
     to: email,
-    subject: `🎉 Welcome to Cannabis ERP! Your account is ready (Customer Code: ${organizationId})`,
+    subject: `🎉 Welcome to Cannabis ERP! Your account is ready`,
     html: welcomeEmailTemplate
   };
 
@@ -111,7 +98,7 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
   }
 };
 
-// Validate payment token (KEEP YOUR EXISTING ONE)
+// KEEP YOUR EXISTING /validate/:token ROUTE (it's good!)
 router.get('/validate/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -127,6 +114,7 @@ router.get('/validate/:token', async (req, res) => {
       return res.status(404).json({ error: 'Invalid or expired payment link' });
     }
     
+    // Mark as clicked if first time
     if (!demoRequest.paymentLinkClicked) {
       demoRequest.paymentLinkClicked = true;
       demoRequest.paymentLinkClickedAt = new Date();
@@ -134,6 +122,7 @@ router.get('/validate/:token', async (req, res) => {
       console.log('👆 Payment link clicked for first time');
     }
     
+    // Return demo data for payment page
     const responseData = {
       email: demoRequest.email,
       firstName: demoRequest.firstName,
@@ -153,13 +142,14 @@ router.get('/validate/:token', async (req, res) => {
   }
 });
 
-// Create Stripe Payment Intent
+// ADD THIS NEW ROUTE - Create Stripe Payment Intent
 router.post('/create-payment-intent', async (req, res) => {
   try {
     const { amount, currency, demoId, email } = req.body;
     
     console.log('💳 Creating payment intent for:', email);
     
+    // Validate demo request exists
     const demoRequest = await DemoRequest.findById(demoId);
     if (!demoRequest) {
       return res.status(404).json({ error: 'Demo request not found' });
@@ -189,7 +179,7 @@ router.post('/create-payment-intent', async (req, res) => {
 
     // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
+      amount: amount, // Amount in cents (29900 = $299.00)
       currency: currency,
       customer: customer.id,
       metadata: {
@@ -213,26 +203,23 @@ router.post('/create-payment-intent', async (req, res) => {
   }
 });
 
-// Create account with Organization (UPDATED)
+// UPDATE YOUR EXISTING /create-account ROUTE
 router.post('/create-account', async (req, res) => {
   try {
     const { 
-      email,           // Billing email (where invoices go)
+      email, 
       firstName, 
       lastName, 
       company, 
-      password,        // Password for the owner account
+      password, 
       paymentLinkId,
-      paymentIntentId,
-      paymentData,
-      ownerEmail       // NEW: Optional different login email
+      paymentIntentId,  // NEW - from Stripe
+      paymentData       // NEW - from Stripe
     } = req.body;
     
-    console.log('💳 Creating account for payment...');
-    console.log('Billing Email:', email);
-    console.log('Owner Email:', ownerEmail || email);
+    console.log('💳 Creating account for payment:', email);
     
-    // Verify Stripe payment if paymentIntentId exists
+    // If paymentIntentId exists, verify payment with Stripe
     if (paymentIntentId) {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -254,55 +241,32 @@ router.post('/create-account', async (req, res) => {
       }
     }
     
-    // Use ownerEmail if provided, otherwise use billing email
-    const loginEmail = ownerEmail || email;
-    
     // Check if user already exists
-    const existingUser = await User.findOne({ email: loginEmail.toLowerCase() });
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ 
         success: false, 
-        error: 'An account with this email already exists' 
+        error: 'Account already exists for this email' 
       });
     }
     
-    // Create Organization
-    const organization = new Organization({
-      companyName: company,
-      billingEmail: email.toLowerCase(),
-      stripeCustomerId: paymentData?.stripeCustomerId,
-      stripeSubscriptionId: paymentData?.stripeSubscriptionId || null,
-      subscriptionStatus: 'active',
-      subscriptionPlan: 'starter',
-      currentUsers: 1,
-      maxUsers: 5, // Starter plan limit
-      basePlan: 299,
-      pricePerUser: 149
-    });
-    
-    await organization.save();
-    console.log('✅ Organization created:', organization.organizationId);
-    
-    // Create Owner User
+    // Create user account with custom password and email
     const user = new User({
-      email: loginEmail.toLowerCase(),
-      password: password,
-      firstName: firstName,
-      lastName: lastName,
-      organizationId: organization.organizationId,
-      role: 'owner',
-      isOwner: true,
-      isActive: true,
-      permissions: User.getDefaultPermissions('owner'),
-      emailVerified: false
+      email,
+      name: `${firstName} ${lastName}`,
+      businessName: company,
+      password: password, // User model will hash it
+      accessLevel: 'paid',
+      subscriptionStatus: 'active',
+      companyName: company,
+      paymentCompleted: true,
+      accountCreatedFromPayment: true,
+      stripeCustomerId: paymentData?.stripeCustomerId, // Store Stripe customer ID
+      createdAt: new Date()
     });
     
     await user.save();
-    console.log('✅ Owner user created:', user.email);
-    
-    // Update organization with ownerId
-    organization.ownerId = user._id;
-    await organization.save();
+    console.log('✅ User account created:', email);
     
     // Update demo request status
     const demoRequest = await DemoRequest.findById(paymentLinkId);
@@ -316,47 +280,17 @@ router.post('/create-account', async (req, res) => {
     
     // Send welcome email
     try {
-      await sendWelcomeEmail(
-        email,
-        firstName,
-        company,
-        organization.organizationId,
-        loginEmail
-      );
+      await sendWelcomeEmail(email, firstName, company);
     } catch (emailError) {
       console.error('⚠️ Welcome email failed (but account created):', emailError);
     }
     
-    // Generate JWT token for auto-login
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        organizationId: organization.organizationId,
-        role: user.role,
-        email: user.email
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    
-    console.log('✅ Account creation complete!');
-    console.log('   Organization ID:', organization.organizationId);
-    console.log('   Owner Email:', user.email);
-    console.log('   Billing Email:', organization.billingEmail);
+    console.log('✅ Account creation complete for:', email);
     
     res.json({
       success: true,
       message: 'Account created successfully',
-      token: token,
-      userId: user._id,
-      organizationId: organization.organizationId,
-      user: {
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        organizationName: organization.companyName
-      }
+      userId: user._id
     });
     
   } catch (error) {
@@ -365,6 +299,29 @@ router.post('/create-account', async (req, res) => {
       success: false, 
       error: 'Failed to create account' 
     });
+  }
+});
+
+// KEEP YOUR DEBUG ROUTE (optional - for testing)
+router.get('/debug-user/:email', async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.params.email });
+    if (!user) {
+      return res.json({ error: 'User not found' });
+    }
+    
+    res.json({
+      email: user.email,
+      name: user.name,
+      accessLevel: user.accessLevel,
+      subscriptionStatus: user.subscriptionStatus,
+      hasPassword: !!user.password,
+      passwordLength: user.password ? user.password.length : 0,
+      accountCreatedFromPayment: user.accountCreatedFromPayment,
+      stripeCustomerId: user.stripeCustomerId || 'Not set'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

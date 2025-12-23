@@ -1,11 +1,12 @@
 const express = require('express');
 const Product = require('../models/Product');
-const {protect, requireAccess} = require('../middlewares/authMiddleware')
+const { protect, requireAccess } = require('../middlewares/authMiddleware');
+const { requireAuth } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
 // GET /api/products - get all products with filtering
-router.get('/', protect, requireAccess, async(req, res) => {
+router.get('/', requireAuth, async(req, res) => {
     try {
         const {
             category,
@@ -13,52 +14,57 @@ router.get('/', protect, requireAccess, async(req, res) => {
             inStock,
             lowStock,
             search,
-            page=1,
-            limit=20,
+            page = 1,
+            limit = 20,
             sortBy = 'name'
         } = req.query
 
-        // build filter object
-        const filter = { isActive:true };
+        // CRITICAL: Filter by organizationId
+        const filter = { 
+            organizationId: req.organizationId,  // ← Only this organization's products
+            isActive: true 
+        };
 
         if(category) filter.category = category;
         if(subcategory) filter.subcategory = subcategory;
         if(inStock === 'true') filter['inventory.currentStock'] = {$gt:0};
         if(lowStock === 'true') filter['inventory.currentStock'] = {$lte:5};
         if(search) {
-            filter.$text = { $search:search};
+            filter.$text = { $search: search};
         }
 
-        //calculate pagination
-        const skip = (parseInt(page) -1) *parseInt(limit)
+        // Calculate pagination
+        const skip = (parseInt(page) - 1) * parseInt(limit)
 
-        //execute query
+        // Execute query
         const products = await Product.find(filter)
-        .sort(sortBy)
-        .skip(skip)
-        .limit(parseInt(limit))
-        .populate('createdBy', 'firstName lastName');
+            .sort(sortBy)
+            .skip(skip)
+            .limit(parseInt(limit))
+            .populate('createdBy', 'firstName lastName');
 
         const total = await Product.countDocuments(filter);
 
         res.json({
             products,
             pagination: {
-                current:parseInt(page),
-                pages: Math.ceil(total/ parseInt(limit)),
+                current: parseInt(page),
+                pages: Math.ceil(total / parseInt(limit)),
                 total
             }
         });
     } catch (error) {
-        res.status(500).json({message: 'Error fetching products', error:error.message})
+        res.status(500).json({message: 'Error fetching products', error: error.message})
     }
 })
 
 // GET /api/products/:id - get single product
-router.get('/:id',protect, requireAccess, async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id)
-        .populate('createdBy', 'firstName lastName');
+        const product = await Product.findOne({
+            _id: req.params.id,
+            organizationId: req.organizationId  // ← Security: verify ownership
+        }).populate('createdBy', 'firstName lastName');
 
         if(!product) {
             return res.status(404).json({message: 'Product not found'});
@@ -71,11 +77,12 @@ router.get('/:id',protect, requireAccess, async (req, res) => {
 });
 
 // POST /api/products - create new product
-router.post('/', protect, requireAccess, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
     try {
         const productData = {
             ...req.body,
-            createdBy:req.user._id
+            organizationId: req.organizationId,  // ← Tag with organization
+            createdBy: req.userId                // ← Track creator
         };
 
         const product = new Product(productData);
@@ -86,17 +93,20 @@ router.post('/', protect, requireAccess, async (req, res) => {
             product
         });
     } catch (error) {
-        res.status(400).json({message:'Error creating product', error:error.message});
+        res.status(400).json({message:'Error creating product', error: error.message});
     }
 });
 
 // PUT /api/products/:id - update product
-router.put('/:id', protect, requireAccess, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
     try {
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
+        const product = await Product.findOneAndUpdate(
+            { 
+                _id: req.params.id,
+                organizationId: req.organizationId  // ← Security: verify ownership
+            },
             req.body,
-            {new:true, runValidators:true}
+            {new: true, runValidators: true}
         );
 
         if(!product) {
@@ -108,34 +118,42 @@ router.put('/:id', protect, requireAccess, async (req, res) => {
             product
         });
     } catch(error) {
-        res.status(400).json({message:'Error updating product', error:error.message});
+        res.status(400).json({message:'Error updating product', error: error.message});
     }
 });
 
 // DELETE /api/products/:id - soft delete product
-router.delete('/:id', protect, requireAccess, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
     try {
-    const product = await Product.findByIdAndUpdate(
-        req.params.id,
-        {isActive:false},
-        {new:true}
-    );
+        const product = await Product.findOneAndUpdate(
+            {
+                _id: req.params.id,
+                organizationId: req.organizationId  // ← Security: verify ownership
+            },
+            {isActive: false},
+            {new: true}
+        );
 
-    if(!product) {
-        return res.status(404).json({message:'Product not found'});
-    }
-    
-    res.json({message:'Product deleted succesfully'});
+        if(!product) {
+            return res.status(404).json({message:'Product not found'});
+        }
+        
+        res.json({message:'Product deleted successfully'});
     } catch(error) {
-        res.status(500).json({message: 'Error deleted product', error: error.message});
+        res.status(500).json({message: 'Error deleting product', error: error.message});
     }
 });
 
 // GET /api/products/categories/stats - Get category statistics
-router.get('/categories/stats', protect, requireAccess, async (req, res) => {
+router.get('/categories/stats', requireAuth, async (req, res) => {
     try {
         const stats = await Product.aggregate([
-            {$match:{isActive:true}},
+            {
+                $match: {
+                    organizationId: req.organizationId,  // ← Only this organization
+                    isActive: true
+                }
+            },
             {
                 $group:{
                     _id:'$category',
@@ -157,7 +175,7 @@ router.get('/categories/stats', protect, requireAccess, async (req, res) => {
 
         res.json(stats);
     } catch (error) {
-        res.status(500).json({message: 'Error fetching category stats', error:error.message})
+        res.status(500).json({message: 'Error fetching category stats', error: error.message})
     }
 })
 

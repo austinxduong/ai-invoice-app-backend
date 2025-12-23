@@ -4,14 +4,20 @@ const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/db");
 
+// Existing route imports
 const authRoutes = require('./routes/authRoutes')
 const invoiceRoutes = require('./routes/invoiceRoutes')
 const aiRoutes = require('./routes/aiRoutes')
 const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes')
 const demoRoutes = require('./routes/demoRoutes')
-const { protect, requireAccess } = require('./middlewares/authMiddleware')
 const paymentRoutes = require('./routes/paymentRoutes');
+
+// NEW: Multi-tenancy route imports ⬇️⬇️⬇️
+const newAuthRoutes = require('./routes/auth.routes');
+const teamRoutes = require('./routes/team.routes');
+
+const { protect, requireAccess } = require('./middlewares/authMiddleware')
 
 
 const app = express();
@@ -28,16 +34,16 @@ app.use((req, res, next) => {
 
     // Allow requests with no origin (mobile apps, postman, etc.)
     if (!origin) {
-    const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host;
+        const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host;
 
-    if (forwardedHost && forwardedHost.includes('ngrok-free.dev')) {
-        res.setHeader('Access-Control-Allow-Origin', 'https://crustless-diastrophic-thi.ngrok-free.dev');
-    } else {
-        res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
+        if (forwardedHost && forwardedHost.includes('ngrok-free.dev')) {
+            res.setHeader('Access-Control-Allow-Origin', 'https://crustless-diastrophic-thi.ngrok-free.dev');
+        } else {
+            res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
         }
     } else if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
-}
+    }
 
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -60,7 +66,7 @@ connectDB();
 app.use(express.json());
 console.log('Mongo URI:', process.env.MONGO_URI);
 
-// routes
+// Existing routes
 app.use("/api/auth", authRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/ai", aiRoutes)
@@ -69,8 +75,9 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api', demoRoutes)
 app.use('/api/payment', paymentRoutes);
 
-
-
+// NEW: Multi-tenancy routes ⬇️⬇️⬇️
+app.use('/api/auth-new', newAuthRoutes);  // New auth endpoints (register, login with org)
+app.use('/api/team', teamRoutes);          // Team management endpoints
 
 // start server
 const PORT = process.env.PORT || 8000;
