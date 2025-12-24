@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const TransactionSchema = new mongoose.Schema({
+    // ✅ CRITICAL: Add organizationId for multi-tenancy
+    organizationId: {
+        type: String,
+        required: true,
+        index: true
+    },
+    
     transactionId: {
         type: String,
         required: true,
@@ -32,7 +39,8 @@ const TransactionSchema = new mongoose.Schema({
             unit: {
                 type: String,
                 required: true,
-                enum: ['gram', 'eighth', 'quarter', 'half', 'ounce', 'each', 'package']
+                // ✅ FIXED: Removed duplicate 'each' and added more units
+                enum: ['unit', 'each', 'gram', 'eighth', 'quarter', 'half', 'ounce', 'package', 'pound', 'kilogram', 'liter', 'milliliter']
             },
             weight: {
                 type: Number,
@@ -253,17 +261,23 @@ totals: {
     timestamps: true // adds createdAt and updatedAt
 });
 
-// Indexes for performance
-TransactionSchema.index({ transactionId: 1 }, { unique: true });
-TransactionSchema.index({ createdAt: -1 }); // For date-based queries
+// ✅ CRITICAL: Add organizationId indexes
+TransactionSchema.index({ organizationId: 1, transactionId: 1 }, { unique: true });
+TransactionSchema.index({ organizationId: 1, createdAt: -1 }); // For date-based queries per org
+TransactionSchema.index({ organizationId: 1, 'compliance.employeeId': 1 });
+TransactionSchema.index({ organizationId: 1, paymentMethod: 1 });
+TransactionSchema.index({ organizationId: 1, status: 1 });
+
+// Keep these for performance
+TransactionSchema.index({ createdAt: -1 }); // Global date index
 TransactionSchema.index({ 'compliance.employeeId': 1 });
 TransactionSchema.index({ paymentMethod: 1 });
 TransactionSchema.index({ status: 1 });
 TransactionSchema.index({ processedAt: -1 });
 
 // Compound indexes for reporting
-TransactionSchema.index({ createdAt: -1, status: 1 });
-TransactionSchema.index({ 'compliance.employeeId': 1, createdAt: -1 });
+TransactionSchema.index({ organizationId: 1, createdAt: -1, status: 1 });
+TransactionSchema.index({ organizationId: 1, 'compliance.employeeId': 1, createdAt: -1 });
 
 // Virtual for total items count
 TransactionSchema.virtual('totalItems').get(function() {
@@ -283,9 +297,10 @@ TransactionSchema.methods.canBeRefunded = function() {
     return this.status === 'completed' && this.paymentMethod !== 'cash';
 };
 
-// Static method to find transactions by date range
-TransactionSchema.statics.findByDateRange = function(startDate, endDate, filters = {}) {
+// ✅ UPDATED: Static method to find transactions by date range (with organizationId)
+TransactionSchema.statics.findByDateRange = function(startDate, endDate, organizationId, filters = {}) {
     const query = {
+        organizationId: organizationId,  // ← Filter by organization
         createdAt: {
             $gte: new Date(startDate),
             $lte: new Date(endDate)
@@ -300,11 +315,12 @@ TransactionSchema.statics.findByDateRange = function(startDate, endDate, filters
         .sort({ createdAt: -1 });
 };
 
-// Static method for sales reporting
-TransactionSchema.statics.getSalesReport = function(startDate, endDate) {
+// ✅ UPDATED: Static method for sales reporting (with organizationId)
+TransactionSchema.statics.getSalesReport = function(startDate, endDate, organizationId) {
     return this.aggregate([
         {
             $match: {
+                organizationId: organizationId,  // ← Filter by organization
                 createdAt: {
                     $gte: new Date(startDate),
                     $lte: new Date(endDate)

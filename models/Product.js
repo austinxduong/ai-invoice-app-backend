@@ -1,4 +1,4 @@
-// backend/models/Product.js (Updated with Multi-Tenancy)
+// backend/models/Product.js (Multi-Tenancy + Pricing Array)
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
@@ -38,12 +38,26 @@ const productSchema = new mongoose.Schema({
     default: ''
   },
   
-  // Pricing
-  price: {
-    type: Number,
-    required: true,
-    min: 0
-  },
+  // ✅ RESTORED: Multiple Pricing Tiers
+  pricing: [{
+    unit: {
+      type: String,
+      required: true,
+      enum: ['unit', 'each', 'gram', 'eighth', 'quarter', 'half', 'ounce', 'pound', 'kilogram', 'liter', 'milliliter', 'package']
+    },
+    weight: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0
+    }
+  }],
+  
+  // Cost (for profit calculation)
   cost: {
     type: Number,
     default: 0,
@@ -64,7 +78,7 @@ const productSchema = new mongoose.Schema({
   unit: {
     type: String,
     default: 'unit',
-    enum: ['unit', 'gram', 'ounce', 'pound', 'kilogram', 'liter', 'milliliter']
+    enum: ['unit', 'gram', 'ounce', 'pound', 'kilogram', 'liter', 'milliliter', 'each', 'package']
   },
   
   // Cannabis-Specific Fields
@@ -90,8 +104,43 @@ const productSchema = new mongoose.Schema({
     default: null
   },
   
+  // Additional Cannabis Fields (from CSV)
+  effects: [{
+    type: String,
+    trim: true
+  }],
+  flavors: [{
+    type: String,
+    trim: true
+  }],
+  
+  // Compliance (from CSV)
+  compliance: {
+    batchNumber: String,
+    labTested: {
+      type: Boolean,
+      default: false
+    },
+    licensedProducer: String,
+    harvestDate: Date,
+    packagedDate: Date,
+    expirationDate: Date,
+    stateTrackingId: String
+  },
+  
+  // Supplier (from CSV)
+  supplier: {
+    name: String,
+    contact: String,
+    license: String
+  },
+  
   // Status
   isActive: {
+    type: Boolean,
+    default: true
+  },
+  isAvailable: {
     type: Boolean,
     default: true
   },
@@ -99,6 +148,7 @@ const productSchema = new mongoose.Schema({
   // Images
   images: [{
     url: String,
+    alt: String,
     isPrimary: {
       type: Boolean,
       default: false
@@ -132,10 +182,19 @@ productSchema.index({ organizationId: 1, category: 1 });
 productSchema.index({ organizationId: 1, isActive: 1 });
 productSchema.index({ organizationId: 1, name: 'text' }); // Text search within organization
 
-// Virtual for profit margin
+// ✅ Virtual for base price (uses first pricing option)
+productSchema.virtual('basePrice').get(function() {
+  if (this.pricing && this.pricing.length > 0) {
+    return this.pricing[0].price;
+  }
+  return 0;
+});
+
+// ✅ Virtual for profit margin (uses first pricing option)
 productSchema.virtual('profitMargin').get(function() {
   if (this.cost === 0) return 0;
-  return ((this.price - this.cost) / this.cost) * 100;
+  const basePrice = this.basePrice;
+  return ((basePrice - this.cost) / this.cost) * 100;
 });
 
 // Virtual for stock status
@@ -171,6 +230,12 @@ productSchema.methods.isLowStock = function() {
 
 productSchema.methods.isOutOfStock = function() {
   return this.stockQuantity === 0;
+};
+
+// ✅ Method to get pricing option by unit
+productSchema.methods.getPricingByUnit = function(unit) {
+  if (!this.pricing || this.pricing.length === 0) return null;
+  return this.pricing.find(p => p.unit === unit) || this.pricing[0];
 };
 
 // Static methods

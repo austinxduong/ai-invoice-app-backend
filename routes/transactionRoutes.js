@@ -46,14 +46,26 @@ router.post('/', requireAuth, async (req, res) => {
                 cannabis: item.cannabis || {}
             });
 
-            // Update product inventory
-            if (product.inventory.currentStock < item.quantity) {
+            // ✅ Update product inventory - Handle both old and new schema
+            const currentStock = product.stockQuantity !== undefined 
+                ? product.stockQuantity 
+                : (product.inventory?.currentStock || 0);
+            
+            if (currentStock < item.quantity) {
                 return res.status(400).json({
-                    message: `Insufficient inventory for ${product.name}`
+                    message: `Insufficient inventory for ${product.name}. Available: ${currentStock}, Requested: ${item.quantity}`
                 });
             }
             
-            product.inventory.currentStock -= item.quantity;
+            // Update stock based on schema type
+            if (product.stockQuantity !== undefined) {
+                // New schema
+                product.stockQuantity -= item.quantity;
+            } else if (product.inventory) {
+                // Old schema
+                product.inventory.currentStock -= item.quantity;
+            }
+            
             await product.save();
         }
 

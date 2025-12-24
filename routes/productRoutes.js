@@ -97,6 +97,78 @@ router.post('/', requireAuth, async (req, res) => {
     }
 });
 
+// POST /api/products/import - bulk import products (NEW!)
+router.post('/import', requireAuth, async (req, res) => {
+    try {
+        const { products } = req.body;
+        
+        if (!Array.isArray(products) || products.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Products array is required'
+            });
+        }
+        
+        const results = {
+            success: [],
+            errors: []
+        };
+        
+        console.log(`📦 Importing ${products.length} products for org: ${req.organizationId}`);
+        
+        for (let i = 0; i < products.length; i++) {
+            const productData = products[i];
+            
+            try {
+                // CRITICAL: Add organizationId to each product
+                const product = new Product({
+                    ...productData,
+                    organizationId: req.organizationId,  // ← Add organization ID
+                    createdBy: req.userId                // ← Track who imported
+                });
+                
+                await product.save();
+                results.success.push({
+                    index: i,
+                    name: product.name,
+                    sku: product.sku,
+                    id: product._id
+                });
+                
+                console.log(`✅ Imported: ${product.name} (${product.sku})`);
+                
+            } catch (error) {
+                console.error(`❌ Import error for product ${i}:`, productData.name, error.message);
+                results.errors.push({ 
+                    index: i,
+                    name: productData.name || productData.sku || 'Unknown',
+                    sku: productData.sku,
+                    error: error.message 
+                });
+            }
+        }
+        
+        console.log(`📊 Import complete: ${results.success.length} success, ${results.errors.length} errors`);
+        
+        res.json({
+            success: true,
+            message: 'Import completed',
+            successCount: results.success.length,
+            errorCount: results.errors.length,
+            successfulProducts: results.success,
+            failedProducts: results.errors
+        });
+        
+    } catch (error) {
+        console.error('❌ Import endpoint error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Import failed',
+            error: error.message
+        });
+    }
+});
+
 // PUT /api/products/:id - update product
 router.put('/:id', requireAuth, async (req, res) => {
     try {
