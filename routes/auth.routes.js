@@ -282,7 +282,15 @@ router.get('/me', requireAuth, async (req, res) => {
  */
 router.put('/me', requireAuth, async (req, res) => {
   try {
-    const { name, firstName, lastName, email, phone, address } = req.body;
+    const { 
+      name, 
+      firstName, 
+      lastName, 
+      email, 
+      phone, 
+      address,
+      businessName  // ✅ ADD: Accept businessName from frontend
+    } = req.body;
     
     const user = await User.findById(req.userId);
     
@@ -303,14 +311,28 @@ router.put('/me', requireAuth, async (req, res) => {
       user.name = `${firstName} ${lastName}`;
     }
     
-    // Email changes require special handling (not implemented yet for security)
-    // if (email && email !== user.email) { ... verification needed ... }
-    
     await user.save();
     
+    // ✅ ADD: Update organization if businessName is provided
     const organization = await Organization.findOne({ 
       organizationId: user.organizationId 
     });
+    
+    if (!organization) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Organization not found' 
+      });
+    }
+    
+    // ✅ UPDATE: Save businessName to organization
+    if (businessName !== undefined && user.isOwner) {
+      organization.companyName = businessName;
+      await organization.save();
+      console.log('✅ Organization name updated to:', businessName);
+    } else if (businessName !== undefined && !user.isOwner) {
+      console.log('⚠️ Non-owner tried to update businessName');
+    }
     
     console.log('✅ Profile updated for:', user.email);
     
@@ -328,10 +350,10 @@ router.put('/me', requireAuth, async (req, res) => {
         isOwner: user.isOwner,
         permissions: user.permissions,
         organizationId: user.organizationId,
-        organizationName: organization?.companyName,
-        businessName: organization?.companyName,
-        subscriptionPlan: organization?.subscriptionPlan,
-        subscriptionStatus: organization?.subscriptionStatus
+        organizationName: organization.companyName,  // ✅ Now returns updated value!
+        businessName: organization.companyName,      // ✅ Now returns updated value!
+        subscriptionPlan: organization.subscriptionPlan,
+        subscriptionStatus: organization.subscriptionStatus
       }
     });
     
