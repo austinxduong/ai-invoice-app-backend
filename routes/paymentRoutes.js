@@ -169,15 +169,50 @@ router.get('/validate/:token', async (req, res) => {
   }
 });
 
-// ✅ UPDATED: Create Stripe Payment Intent with license quantity
+// ✅ NEW: Check if email already exists BEFORE payment
+router.post('/check-email', async (req, res) => {
+  try {
+    const { accountEmail } = req.body;
+    
+    console.log('🔍 Checking if email exists:', accountEmail);
+    
+    const existingUser = await User.findOne({ 
+      email: accountEmail.toLowerCase() 
+    });
+    
+    if (existingUser) {
+      console.log('❌ Email already exists:', accountEmail);
+      return res.status(400).json({ 
+        success: false,
+        error: 'An account with this email already exists. Please login instead.' 
+      });
+    }
+    
+    console.log('✅ Email is available:', accountEmail);
+    res.json({ 
+      success: true,
+      available: true 
+    });
+    
+  } catch (error) {
+    console.error('❌ Error checking email:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to check email availability' 
+    });
+  }
+});
+
+// ✅ UPDATED: Create Stripe Payment Intent with license quantity & idempotencyKey
 router.post('/create-payment-intent', async (req, res) => {
   try {
-    const { amount, currency, demoId, billingEmail, licenseQuantity } = req.body;
+    const { amount, currency, demoId, billingEmail, licenseQuantity, idempotencyKey } = req.body;
     
     console.log('💳 Creating payment intent...');
     console.log('   Amount:', amount);
     console.log('   Billing Email:', billingEmail);
     console.log('   Licenses:', licenseQuantity);
+    console.log('   Idempotency Key:', idempotencyKey);  // ✅ Log for debugging
     
     const demoRequest = await DemoRequest.findById(demoId);
     if (!demoRequest) {
@@ -207,7 +242,7 @@ router.post('/create-payment-intent', async (req, res) => {
       console.log('✅ Created new Stripe customer:', customer.id);
     }
 
-    // Create payment intent
+    // ✅ Create payment intent with idempotency key
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount,
       currency: currency,
@@ -221,6 +256,8 @@ router.post('/create-payment-intent', async (req, res) => {
       },
       description: `Cannabis ERP - ${licenseQuantity || 1} User License${licenseQuantity > 1 ? 's' : ''}`,
       receipt_email: billingEmail,
+    }, {
+      idempotencyKey: idempotencyKey  // ✅ Second parameter - prevents duplicate charges!
     });
 
     console.log('✅ Payment intent created:', paymentIntent.id);
