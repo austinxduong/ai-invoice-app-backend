@@ -149,18 +149,26 @@ router.post('/invite', requireAuth, requirePermission('canManageUsers'), async (
       });
     }
     
-    // Check if user already exists in this organization
-    const existingUser = await User.findOne({
-      email: email.toLowerCase(),
-      organizationId: req.organizationId
+// ✅ IMPROVED: Check if user exists in ANY organization
+const existingUser = await User.findOne({
+  email: email.toLowerCase()
+});
+
+if (existingUser) {
+  // Check if they're already in THIS organization
+  if (existingUser.organizationId === req.organizationId) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'This user is already a member of your organization' 
     });
-    
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'This user is already a member of your organization' 
-      });
-    }
+  } else {
+    // User exists but in a different organization
+    return res.status(400).json({ 
+      success: false,
+      error: `This email is already registered with another organization. Please use a different email address.` 
+    });
+  }
+}
     
     // Generate invite token
     const inviteToken = crypto.randomBytes(32).toString('hex');
@@ -228,6 +236,63 @@ router.post('/invite', requireAuth, requirePermission('canManageUsers'), async (
     res.status(500).json({ 
       success: false,
       error: 'Failed to invite user' 
+    });
+  }
+});
+
+/**
+ * @route   GET /api/team/validate-invite/:token
+ * @desc    Validate invitation token and get invite details
+ * @access  Public
+ */
+router.get('/validate-invite/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    console.log('🔍 Validating invitation token:', token);
+    
+    // Find user by invite token
+    const user = await User.findOne({
+      inviteToken: token,
+      inviteTokenExpiry: { $gt: new Date() }
+    });
+    
+    if (!user) {
+      console.log('❌ Invalid or expired token:', token);
+      return res.status(404).json({ 
+        success: false,
+        error: 'Invalid or expired invitation link' 
+      });
+    }
+    
+    // Get organization
+    const organization = await Organization.findOne({ 
+      organizationId: user.organizationId 
+    });
+    
+    if (!organization) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Organization not found' 
+      });
+    }
+    
+    console.log('✅ Invitation validated for:', user.email);
+    
+    res.json({
+      success: true,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      organizationName: organization.companyName
+    });
+    
+  } catch (error) {
+    console.error('❌ Validate invitation error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to validate invitation' 
     });
   }
 });
