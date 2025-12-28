@@ -1,4 +1,4 @@
-// backend/routes/payment.routes.js (Updated with Organization)
+// backend/routes/payment.routes.js (COMPLETE - Updated for Enhanced Payment Form)
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -19,8 +19,8 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Welcome email function
-const sendWelcomeEmail = async (email, firstName, company, organizationId, loginEmail) => {
+// ✅ UPDATED: Welcome email with separate billing and account emails
+const sendWelcomeEmail = async (billingEmail, accountEmail, firstName, company, organizationId, licenseQuantity, monthlyAmount) => {
   const welcomeEmailTemplate = `
 <!DOCTYPE html>
 <html>
@@ -31,7 +31,8 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
         .header { background: linear-gradient(135deg, #059669, #047857); color: white; padding: 20px; border-radius: 8px 8px 0 0; }
         .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; }
-        .customer-code { background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #059669; }
+        .org-code { background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #059669; }
+        .info-box { background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0; }
         .cta-button { display: inline-block; background: #059669; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
         .footer { background: #f8f9fa; padding: 15px; border-radius: 0 0 8px 8px; text-align: center; font-size: 12px; color: #666; }
     </style>
@@ -47,21 +48,30 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
             
             <p>Congratulations! Your payment has been processed successfully and your <strong>${company}</strong> account is now active.</p>
             
-            <div class="customer-code">
-                <h3 style="margin-top: 0;">📋 Your Customer Code:</h3>
-                <p style="font-size: 18px; font-weight: bold; color: #059669; margin: 10px 0;">${organizationId}</p>
-                <p style="font-size: 12px; color: #666; margin-bottom: 0;">
-                    Save this code - you may need it when contacting support or inviting team members.
+            <div class="org-code">
+                <h3 style="margin-top: 0;">🏢 Organization Details:</h3>
+                <p style="margin: 5px 0;"><strong>Organization ID:</strong> <span style="font-size: 16px; font-weight: bold; color: #059669;">${organizationId}</span></p>
+                <p style="margin: 5px 0;"><strong>Company:</strong> ${company}</p>
+                <p style="margin: 5px 0;"><strong>User Licenses:</strong> ${licenseQuantity} user${licenseQuantity > 1 ? 's' : ''}</p>
+                <p style="margin: 5px 0;"><strong>Monthly Cost:</strong> $${monthlyAmount}</p>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    Save this Organization ID - you'll need it for support and team invitations.
                 </p>
             </div>
             
-            <h3>🔑 Your Login Information:</h3>
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0;">
-                <p><strong>Login Email:</strong> ${loginEmail}<br>
-                <strong>Password:</strong> [The password you created during signup]</p>
+            <h3>🔐 Your Login Information:</h3>
+            <div class="info-box">
+                <p style="margin: 5px 0;"><strong>Login Email:</strong> ${accountEmail}</p>
+                <p style="margin: 5px 0;"><strong>Password:</strong> [The password you created during signup]</p>
             </div>
             
-            <p><strong>Billing Email:</strong> ${email} (invoices will be sent here)</p>
+            <h3>💰 Billing Information:</h3>
+            <div class="info-box">
+                <p style="margin: 5px 0;"><strong>Billing Email:</strong> ${billingEmail}</p>
+                <p style="font-size: 13px; color: #666; margin-top: 8px;">
+                    Invoices and receipts will be sent to this email address.
+                </p>
+            </div>
             
             <div style="text-align: center;">
                 <a href="${process.env.FRONTEND_URL}/login" class="cta-button">
@@ -73,12 +83,12 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
             <ul>
                 <li>✅ Log in to your new account</li>
                 <li>✅ Complete your company profile setup</li>
-                <li>✅ Invite team members to collaborate</li>
+                ${licenseQuantity > 1 ? `<li>✅ Invite ${licenseQuantity - 1} team member${licenseQuantity > 2 ? 's' : ''} to collaborate</li>` : ''}
                 <li>✅ Import your existing data (if any)</li>
                 <li>✅ Our team will contact you for onboarding within 24 hours</li>
             </ul>
             
-            <p><strong>Need help getting started?</strong> Reply to this email or call us - we're here to help!</p>
+            <p><strong>Need help getting started?</strong> Reply to this email or contact support - we're here to help!</p>
             
             <p>Welcome to the Cannabis ERP family!</p>
             
@@ -88,30 +98,36 @@ const sendWelcomeEmail = async (email, firstName, company, organizationId, login
         </div>
         
         <div class="footer">
-            <p>Customer Code: ${organizationId} | Company: ${company}</p>
+            <p>Organization ID: ${organizationId} | Company: ${company}</p>
             <p>If you have any questions, just reply to this email or contact support.</p>
         </div>
     </div>
 </body>
 </html>`;
 
+  // ✅ Send to BOTH billing and account emails
+  const recipients = [billingEmail];
+  if (accountEmail !== billingEmail) {
+    recipients.push(accountEmail);
+  }
+
   const mailOptions = {
     from: `"Cannabis ERP Solutions" <${process.env.SMTP_USER}>`,
-    to: email,
-    subject: `🎉 Welcome to Cannabis ERP! Your account is ready (Customer Code: ${organizationId})`,
+    to: recipients.join(', '),
+    subject: `🎉 Welcome to Cannabis ERP! Your account is ready (Org ID: ${organizationId})`,
     html: welcomeEmailTemplate
   };
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log('✅ Welcome email sent to:', email);
+    console.log('✅ Welcome email sent to:', recipients.join(', '));
   } catch (error) {
     console.error('❌ Failed to send welcome email:', error);
     // Don't throw - we don't want to fail account creation if email fails
   }
 };
 
-// Validate payment token (KEEP YOUR EXISTING ONE)
+// Validate payment token
 router.get('/validate/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -153,12 +169,15 @@ router.get('/validate/:token', async (req, res) => {
   }
 });
 
-// Create Stripe Payment Intent
+// ✅ UPDATED: Create Stripe Payment Intent with license quantity
 router.post('/create-payment-intent', async (req, res) => {
   try {
-    const { amount, currency, demoId, email } = req.body;
+    const { amount, currency, demoId, billingEmail, licenseQuantity } = req.body;
     
-    console.log('💳 Creating payment intent for:', email);
+    console.log('💳 Creating payment intent...');
+    console.log('   Amount:', amount);
+    console.log('   Billing Email:', billingEmail);
+    console.log('   Licenses:', licenseQuantity);
     
     const demoRequest = await DemoRequest.findById(demoId);
     if (!demoRequest) {
@@ -168,7 +187,7 @@ router.post('/create-payment-intent', async (req, res) => {
     // Create or retrieve Stripe customer
     let customer;
     const existingCustomers = await stripe.customers.list({
-      email: email,
+      email: billingEmail,
       limit: 1
     });
 
@@ -177,11 +196,12 @@ router.post('/create-payment-intent', async (req, res) => {
       console.log('✅ Found existing Stripe customer:', customer.id);
     } else {
       customer = await stripe.customers.create({
-        email: email,
+        email: billingEmail,
         name: `${demoRequest.firstName} ${demoRequest.lastName}`,
         metadata: {
           demoId: demoId,
-          companyName: demoRequest.companyName
+          companyName: demoRequest.companyName,
+          licenseQuantity: licenseQuantity || 1
         }
       });
       console.log('✅ Created new Stripe customer:', customer.id);
@@ -194,11 +214,13 @@ router.post('/create-payment-intent', async (req, res) => {
       customer: customer.id,
       metadata: {
         demoId: demoId,
-        email: email,
-        companyName: demoRequest.companyName
+        billingEmail: billingEmail,
+        companyName: demoRequest.companyName,
+        licenseQuantity: licenseQuantity || 1,
+        monthlyAmount: amount / 100
       },
-      description: `Cannabis ERP Platform - Monthly Subscription`,
-      receipt_email: email,
+      description: `Cannabis ERP - ${licenseQuantity || 1} User License${licenseQuantity > 1 ? 's' : ''}`,
+      receipt_email: billingEmail,
     });
 
     console.log('✅ Payment intent created:', paymentIntent.id);
@@ -213,26 +235,39 @@ router.post('/create-payment-intent', async (req, res) => {
   }
 });
 
-// Create account with Organization (UPDATED)
+// ✅ UPDATED: Create account with separate billing and account emails
 router.post('/create-account', async (req, res) => {
   try {
     const { 
-      email,           // Billing email (where invoices go)
+      // Organization details
+      companyName,
+      licenseQuantity,
+      monthlyAmount,
+      
+      // Owner account details
+      accountEmail,        // ✅ NEW: Login email
+      password,
       firstName, 
-      lastName, 
-      company, 
-      password,        // Password for the owner account
+      lastName,
+      
+      // Billing details
+      billingEmail,        // ✅ NEW: Billing email
+      
+      // Payment details
       paymentLinkId,
       paymentIntentId,
-      paymentData,
-      ownerEmail       // NEW: Optional different login email
+      stripeCustomerId,
+      cardLast4,
     } = req.body;
     
-    console.log('💳 Creating account for payment...');
-    console.log('Billing Email:', email);
-    console.log('Owner Email:', ownerEmail || email);
+    console.log('💳 Creating account with enhanced details...');
+    console.log('   Company:', companyName);
+    console.log('   Account Email (login):', accountEmail);
+    console.log('   Billing Email:', billingEmail);
+    console.log('   Licenses:', licenseQuantity);
+    console.log('   Monthly Amount:', monthlyAmount);
     
-    // Verify Stripe payment if paymentIntentId exists
+    // Verify Stripe payment
     if (paymentIntentId) {
       try {
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -254,11 +289,8 @@ router.post('/create-account', async (req, res) => {
       }
     }
     
-    // Use ownerEmail if provided, otherwise use billing email
-    const loginEmail = ownerEmail || email;
-    
-    // Check if user already exists
-    const existingUser = await User.findOne({ email: loginEmail.toLowerCase() });
+    // Check if account email already exists
+    const existingUser = await User.findOne({ email: accountEmail.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ 
         success: false, 
@@ -266,16 +298,16 @@ router.post('/create-account', async (req, res) => {
       });
     }
     
-    // Create Organization
+    // ✅ Create Organization with billing email
     const organization = new Organization({
-      companyName: company,
-      billingEmail: email.toLowerCase(),
-      stripeCustomerId: paymentData?.stripeCustomerId,
-      stripeSubscriptionId: paymentData?.stripeSubscriptionId || null,
+      companyName: companyName,
+      billingEmail: billingEmail.toLowerCase(),
+      stripeCustomerId: stripeCustomerId,
+      stripeSubscriptionId: null,
       subscriptionStatus: 'active',
       subscriptionPlan: 'starter',
       currentUsers: 1,
-      maxUsers: 5, // Starter plan limit
+      maxUsers: licenseQuantity || 5,
       basePlan: 299,
       pricePerUser: 149
     });
@@ -283,9 +315,9 @@ router.post('/create-account', async (req, res) => {
     await organization.save();
     console.log('✅ Organization created:', organization.organizationId);
     
-    // Create Owner User
+    // ✅ Create Owner User with account email
     const user = new User({
-      email: loginEmail.toLowerCase(),
+      email: accountEmail.toLowerCase(),
       password: password,
       firstName: firstName,
       lastName: lastName,
@@ -314,14 +346,16 @@ router.post('/create-account', async (req, res) => {
       console.log('✅ Demo request updated to closed_won');
     }
     
-    // Send welcome email
+    // ✅ Send welcome email to both billing and account emails
     try {
       await sendWelcomeEmail(
-        email,
+        billingEmail,
+        accountEmail,
         firstName,
-        company,
+        companyName,
         organization.organizationId,
-        loginEmail
+        licenseQuantity || 1,
+        monthlyAmount || 299
       );
     } catch (emailError) {
       console.error('⚠️ Welcome email failed (but account created):', emailError);
@@ -343,6 +377,7 @@ router.post('/create-account', async (req, res) => {
     console.log('   Organization ID:', organization.organizationId);
     console.log('   Owner Email:', user.email);
     console.log('   Billing Email:', organization.billingEmail);
+    console.log('   Licenses:', organization.maxUsers);
     
     res.json({
       success: true,
@@ -355,7 +390,8 @@ router.post('/create-account', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        organizationName: organization.companyName
+        organizationName: organization.companyName,
+        licenseQuantity: organization.maxUsers
       }
     });
     
