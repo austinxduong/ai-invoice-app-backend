@@ -12,6 +12,7 @@ const productRoutes = require('./routes/productRoutes');
 const transactionRoutes = require('./routes/transactionRoutes')
 const demoRoutes = require('./routes/demoRoutes')
 const paymentRoutes = require('./routes/paymentRoutes');
+const rmaRoutes = require('./routes/rma.routes');
 
 // NEW: Multi-tenancy route imports ⬇️⬇️⬇️
 const newAuthRoutes = require('./routes/auth.routes');
@@ -74,6 +75,7 @@ app.use("/api/products", productRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api', demoRoutes)
 app.use('/api/payment', paymentRoutes);
+app.use('/api/rma', rmaRoutes);
 
 // NEW: Multi-tenancy routes ⬇️⬇️⬇️
 app.use('/api/auth-new', newAuthRoutes);  // New auth endpoints (register, login with org)
