@@ -11,12 +11,29 @@ const rmaItemSchema = new mongoose.Schema({
     required: true
   },
   sku: String,
-  batchNumber: String,
+  
+  // ========== COMPLIANCE DATA (copied from invoice) ==========
+  batchNumber: String,           // Critical for recall tracking
+  stateTrackingId: String,       // Metrc UID that was sold
+  category: String,              // flower, concentrate, etc.
+  strainType: String,            // indica, sativa, hybrid
+  
+  // ========== CANNABINOID PROFILE (what was sold) ==========
+  thcContent: Number,            // % THC at time of sale
+  cbdContent: Number,            // % CBD at time of sale
+  thcMg: Number,                 // Total THC in mg
+  cbdMg: Number,                 // Total CBD in mg
+  
+  // ========== QUANTITY & WEIGHT ==========
   quantity: {
     type: Number,
     required: true,
     min: 1
   },
+  unit: String,                  // gram, eighth, etc.
+  weight: Number,                // Total weight in grams
+  
+  // ========== PRICING ==========
   unitPrice: {
     type: Number,
     required: true
@@ -25,6 +42,17 @@ const rmaItemSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  
+  // ========== DATES (from original sale) ==========
+  packagedDate: Date,
+  harvestDate: Date,
+  labTestDate: Date,
+  
+  // ========== PRODUCER INFO ==========
+  licensedProducer: String,
+  producerLicense: String,
+  
+  // ========== RETURN DETAILS ==========
   reason: {
     type: String,
     required: true
@@ -33,7 +61,38 @@ const rmaItemSchema = new mongoose.Schema({
     type: String,
     enum: ['defective', 'damaged', 'unopened', 'expired', 'wrong_product'],
     default: 'defective'
-  }
+  },
+  defectType: {
+    type: String,
+    enum: ['mold', 'pesticide', 'contamination', 'packaging', 'potency', 'other']
+  },
+  
+  // ========== DISPOSITION (Tier 1 Compliance - REQUIRED) ==========
+  dispositionMethod: {
+    type: String,
+    enum: ['pending', 'quarantine', 'destroy', 'restock', 'return_to_supplier'],
+    default: 'pending'
+  },
+  dispositionDate: Date,
+  dispositionNotes: String,
+  destructionMethod: {
+    type: String,
+    enum: ['incineration', 'composting', 'grinding', 'other']
+  },
+  destructionWitness: String,    // Person who witnessed destruction
+  destructionPhotos: [String],   // Photo evidence of destruction
+  
+  // ========== STATE REPORTING ==========
+  stateNotificationRequired: {
+    type: Boolean,
+    default: false
+  },
+  stateNotificationSent: {
+    type: Boolean,
+    default: false
+  },
+  stateNotificationDate: Date,
+  metrcAdjustmentId: String      // Metrc adjustment tracking ID
 });
 
 const rmaSchema = new mongoose.Schema({
@@ -193,6 +252,35 @@ const rmaSchema = new mongoose.Schema({
     default: 'none'
   },
   wasteReportId: String,
+  
+  // ========== WASTE/DESTRUCTION TRACKING (Compliance) ==========
+  wasteCategory: {
+    type: String,
+    enum: ['defective', 'expired', 'contaminated', 'damaged', 'customer_return', 'other']
+  },
+  totalWeightDestroyed: Number,   // Total grams destroyed
+  totalTHCDestroyed: Number,       // Total mg THC destroyed
+  totalCBDDestroyed: Number,       // Total mg CBD destroyed
+  destructionCompletedDate: Date,
+  destructionWitnessName: String,
+  destructionWitnessTitle: String,
+  destructionMethod: {
+    type: String,
+    enum: ['incineration', 'composting', 'grinding_with_waste', 'other']
+  },
+  destructionLocation: String,
+  destructionPhotos: [String],     // Photo evidence
+  destructionVideoUrl: String,     // Video evidence if required
+  wasteManifestNumber: String,     // Waste tracking manifest
+  
+  // ========== STATE/METRC REPORTING ==========
+  metrcReported: {
+    type: Boolean,
+    default: false
+  },
+  metrcReportDate: Date,
+  metrcAdjustmentId: String,       // Metrc adjustment ID
+  metrcPackageIds: [String],       // Original package IDs being adjusted
   
   // Compliance
   regulatoryNotificationRequired: {

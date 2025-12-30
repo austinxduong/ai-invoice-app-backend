@@ -100,12 +100,94 @@ const organizationSchema = new mongoose.Schema({
     default: Date.now
   },
   
-  // Settings
-  settings: {
-    timezone: {
+  // ========== TIMEZONE CONFIGURATION (NEW!) ==========
+  timezone: {
+    type: String,
+    default: 'America/Los_Angeles',
+    enum: [
+      // US Cannabis States (grouped by timezone)
+      
+      // Pacific Time (PST/PDT UTC-8/-7)
+      'America/Los_Angeles',    // CA, NV, WA
+      
+      // Mountain Time (MST/MDT UTC-7/-6)
+      'America/Denver',          // CO, MT, NM, UT, WY
+      'America/Phoenix',         // AZ (no DST! UTC-7 year-round)
+      'America/Boise',           // ID
+      
+      // Central Time (CST/CDT UTC-6/-5)
+      'America/Chicago',         // IL, MI, MN, MO, ND, OK, SD, WI
+      
+      // Eastern Time (EST/EDT UTC-5/-4)
+      'America/New_York',        // CT, DE, DC, FL, GA, ME, MD, MA, NH, NJ, NY, NC, PA, RI, SC, VT, VA, WV
+      
+      // Alaska Time (AKST/AKDT UTC-9/-8)
+      'America/Anchorage',       // AK
+      
+      // Hawaii-Aleutian Time (HST UTC-10, no DST!)
+      'Pacific/Honolulu',        // HI
+      
+      // US Territories
+      'America/Puerto_Rico',     // PR (AST UTC-4, no DST!)
+      'Pacific/Guam',            // GU (ChST UTC+10, no DST!)
+      
+      // Canada (if expanding north)
+      'America/Toronto',         // ON (EST/EDT)
+      'America/Vancouver',       // BC (PST/PDT)
+      
+      // Common international timezones (for future expansion)
+      'Europe/London',           // UK (GMT/BST)
+      'Europe/Amsterdam',        // Netherlands (CET/CEST)
+      'Australia/Sydney',        // AU (AEDT/AEST)
+    ],
+    required: true
+  },
+  
+  // ========== BUSINESS HOURS (NEW!) ==========
+  businessHours: {
+    weekdayOpen: {
       type: String,
-      default: 'America/Los_Angeles'
+      default: '09:00',  // 9 AM local time
+      match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/  // HH:MM format
     },
+    weekdayClose: {
+      type: String,
+      default: '21:00',  // 9 PM local time
+      match: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/
+    },
+    weekendOpen: {
+      type: String,
+      default: '10:00'
+    },
+    weekendClose: {
+      type: String,
+      default: '20:00'
+    },
+    closed: {
+      type: [String],
+      default: [],  // e.g., ['Sunday'] for closed Sundays
+      enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    }
+  },
+  
+  // ========== LOCATION (NEW!) ==========
+  location: {
+    address: String,
+    city: String,
+    state: String,  // e.g., 'CA', 'CO', 'WA'
+    zip: String,
+    country: {
+      type: String,
+      default: 'US'
+    },
+    coordinates: {
+      latitude: Number,
+      longitude: Number
+    }
+  },
+  
+  // Settings (keeping your existing structure)
+  settings: {
     currency: {
       type: String,
       default: 'USD'
@@ -154,7 +236,7 @@ organizationSchema.index({ billingEmail: 1 });
 organizationSchema.index({ stripeCustomerId: 1 });
 organizationSchema.index({ subscriptionStatus: 1 });
 
-// Methods
+// ========== EXISTING METHODS ==========
 organizationSchema.methods.calculateMonthlyPrice = function() {
   if (this.currentUsers <= 1) {
     return this.basePlan;
@@ -181,6 +263,80 @@ organizationSchema.methods.decrementUserCount = async function() {
     this.currentUsers -= 1;
     await this.save();
   }
+};
+
+// ========== NEW TIMEZONE HELPER METHODS ==========
+
+/**
+ * Get current time in organization's local timezone
+ */
+organizationSchema.methods.getLocalTime = function(utcDate = new Date()) {
+  return new Date(utcDate.toLocaleString('en-US', { timeZone: this.timezone }));
+};
+
+/**
+ * Format datetime for display in local timezone
+ */
+organizationSchema.methods.formatLocalDateTime = function(utcDate) {
+  if (!utcDate) return null;
+  
+  return new Date(utcDate).toLocaleString('en-US', {
+    timeZone: this.timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+/**
+ * Get business day (local date only, no time)
+ * Used for "per day" aggregations
+ */
+organizationSchema.methods.getBusinessDay = function(utcDate = new Date()) {
+  const local = this.getLocalTime(utcDate);
+  // Return midnight UTC of that local date (for storage)
+  return new Date(Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()));
+};
+
+/**
+ * Check if currently within business hours
+ */
+organizationSchema.methods.isCurrentlyOpen = function() {
+  const now = new Date();
+  const local = this.getLocalTime(now);
+  const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][local.getDay()];
+  
+  // Check if closed today
+  if (this.businessHours?.closed?.includes(dayOfWeek)) {
+    return false;
+  }
+  
+  // Get current time in HH:MM format
+  const currentTime = `${String(local.getHours()).padStart(2, '0')}:${String(local.getMinutes()).padStart(2, '0')}`;
+  
+  const isWeekend = dayOfWeek === 'Saturday' || dayOfWeek === 'Sunday';
+  const openTime = isWeekend ? this.businessHours?.weekendOpen : this.businessHours?.weekdayOpen;
+  const closeTime = isWeekend ? this.businessHours?.weekendClose : this.businessHours?.weekdayClose;
+  
+  return currentTime >= openTime && currentTime < closeTime;
+};
+
+/**
+ * Get timezone offset string (e.g., "PST" or "PDT")
+ */
+organizationSchema.methods.getTimezoneAbbr = function() {
+  const now = new Date();
+  const formatted = now.toLocaleString('en-US', {
+    timeZone: this.timezone,
+    timeZoneName: 'short'
+  });
+  
+  // Extract timezone abbreviation (last part)
+  const parts = formatted.split(' ');
+  return parts[parts.length - 1];
 };
 
 // Update timestamp on save
