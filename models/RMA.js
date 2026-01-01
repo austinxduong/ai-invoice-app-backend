@@ -241,6 +241,17 @@ const rmaSchema = new mongoose.Schema({
     default: 0
   },
   
+  // ========== ✅ NEW: REFUND TRANSACTION TRACKING ==========
+  refundTransactionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Transaction'
+  },
+  refundProcessed: {
+    type: Boolean,
+    default: false
+  },
+  // ========================================================
+  
   // Inventory Impact
   inventoryAdjusted: {
     type: Boolean,
