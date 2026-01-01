@@ -21,19 +21,41 @@ router.post('/', requireAuth, async (req, res) => {
         } = req.body;
 
         // Convert item product IDs to ObjectIds and validate products exist
-        const transactionItems = [];
-        for (let item of items) {
-            // CRITICAL: Only find products from this organization
-            const product = await Product.findOne({
-                _id: item.id,
-                organizationId: req.organizationId  // ← Security check
-            });
-            
-            if (!product) {
-                return res.status(404).json({ 
-                    message: `Product not found: ${item.name}` 
-                });
-            }
+const transactionItems = [];
+for (let item of items) {
+    console.log('🔍 Looking for product:', {
+        id: item.id,
+        name: item.name,
+        organizationId: req.organizationId
+    });
+    
+    // CRITICAL: Only find products from this organization
+    const product = await Product.findOne({
+        _id: item.id,
+        organizationId: req.organizationId
+    });
+    
+    console.log('🔍 Product found:', product ? 'YES' : 'NO');
+    if (product) {
+        console.log('🔍 Product details:', {
+            _id: product._id,
+            name: product.name,
+            organizationId: product.organizationId
+        });
+    }
+    
+    if (!product) {
+        // ✅ Check if product exists at all (without org filter)
+        const anyProduct = await Product.findById(item.id);
+        console.log('🔍 Product exists in any org:', anyProduct ? 'YES' : 'NO');
+        if (anyProduct) {
+            console.log('🔍 Product belongs to org:', anyProduct.organizationId);
+        }
+        
+        return res.status(404).json({ 
+            message: `Product not found: ${item.name}` 
+        });
+    }
 
             transactionItems.push({
                 productId: item.id,
