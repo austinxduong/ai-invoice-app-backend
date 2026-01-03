@@ -107,6 +107,13 @@ totals: {
         default: 0,
         min: 0
     },
+    creditApplied: {
+        type: Number,
+        default: 0
+    },
+    finalTotal: {
+        type: Number
+    },
     // Detailed tax breakdown
     taxBreakdown: {
         total: {
@@ -157,7 +164,7 @@ totals: {
     paymentMethod: {
         type: String,
         required: true,
-        enum: ['cash', 'card', 'check', 'digital', 'store_credit'],
+        enum: ['cash', 'card', 'check', 'digital', 'store_credit', 'cash+credit'],
         default: 'cash'
     },
     cashReceived: {
@@ -206,6 +213,14 @@ totals: {
         emailed: {
             type: Boolean,
             default: false
+        },
+        creditApplied: {
+            type: Number,
+            default: 0
+        },
+        creditMemoNumber: {
+            type: String,
+            default: null
         },
         emailAddress: String
     },
