@@ -100,7 +100,7 @@ const organizationSchema = new mongoose.Schema({
     default: Date.now
   },
   
-  // ========== TIMEZONE CONFIGURATION (NEW!) ==========
+  // ========== TIMEZONE CONFIGURATION ==========
   timezone: {
     type: String,
     default: 'America/Los_Angeles',
@@ -143,7 +143,7 @@ const organizationSchema = new mongoose.Schema({
     required: true
   },
   
-  // ========== BUSINESS HOURS (NEW!) ==========
+  // ========== BUSINESS HOURS ==========
   businessHours: {
     weekdayOpen: {
       type: String,
@@ -170,15 +170,48 @@ const organizationSchema = new mongoose.Schema({
     }
   },
   
-  // ========== LOCATION (NEW!) ==========
+  // ========== FACILITY LOCATION (UPDATED!) ==========
   location: {
-    address: String,
-    city: String,
-    state: String,  // e.g., 'CA', 'CO', 'WA'
-    zip: String,
+    facilityName: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    address: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    city: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    state: {
+      type: String,
+      default: '',
+      trim: true,
+      uppercase: true,
+      maxLength: 2
+    },
+    zip: {
+      type: String,
+      default: '',
+      trim: true
+    },
     country: {
       type: String,
       default: 'US'
+    },
+    phone: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    licenseNumber: {
+      type: String,
+      default: '',
+      trim: true
     },
     coordinates: {
       latitude: Number,
@@ -265,7 +298,7 @@ organizationSchema.methods.decrementUserCount = async function() {
   }
 };
 
-// ========== NEW TIMEZONE HELPER METHODS ==========
+// ========== TIMEZONE HELPER METHODS ==========
 
 /**
  * Get current time in organization's local timezone
