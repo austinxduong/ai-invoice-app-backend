@@ -21,41 +21,41 @@ router.post('/', requireAuth, async (req, res) => {
         } = req.body;
 
         // Convert item product IDs to ObjectIds and validate products exist
-const transactionItems = [];
-for (let item of items) {
-    console.log('🔍 Looking for product:', {
-        id: item.id,
-        name: item.name,
-        organizationId: req.organizationId
-    });
-    
-    // CRITICAL: Only find products from this organization
-    const product = await Product.findOne({
-        _id: item.id,
-        organizationId: req.organizationId
-    });
-    
-    console.log('🔍 Product found:', product ? 'YES' : 'NO');
-    if (product) {
-        console.log('🔍 Product details:', {
-            _id: product._id,
-            name: product.name,
-            organizationId: product.organizationId
-        });
-    }
-    
-    if (!product) {
-        // ✅ Check if product exists at all (without org filter)
-        const anyProduct = await Product.findById(item.id);
-        console.log('🔍 Product exists in any org:', anyProduct ? 'YES' : 'NO');
-        if (anyProduct) {
-            console.log('🔍 Product belongs to org:', anyProduct.organizationId);
-        }
-        
-        return res.status(404).json({ 
-            message: `Product not found: ${item.name}` 
-        });
-    }
+        const transactionItems = [];
+        for (let item of items) {
+            console.log('🔍 Looking for product:', {
+                id: item.id,
+                name: item.name,
+                organizationId: req.organizationId
+            });
+            
+            // CRITICAL: Only find products from this organization
+            const product = await Product.findOne({
+                _id: item.id,
+                organizationId: req.organizationId
+            });
+            
+            console.log('🔍 Product found:', product ? 'YES' : 'NO');
+            if (product) {
+                console.log('🔍 Product details:', {
+                    _id: product._id,
+                    name: product.name,
+                    organizationId: product.organizationId
+                });
+            }
+            
+            if (!product) {
+                // ✅ Check if product exists at all (without org filter)
+                const anyProduct = await Product.findById(item.id);
+                console.log('🔍 Product exists in any org:', anyProduct ? 'YES' : 'NO');
+                if (anyProduct) {
+                    console.log('🔍 Product belongs to org:', anyProduct.organizationId);
+                }
+                
+                return res.status(404).json({ 
+                    message: `Product not found: ${item.name}` 
+                });
+            }
 
             transactionItems.push({
                 productId: item.id,
@@ -92,7 +92,7 @@ for (let item of items) {
         }
 
         const transaction = new Transaction({
-            organizationId: req.organizationId,  // ← Tag with organization
+            organizationId: req.organizationId,
             transactionId,
             items: transactionItems,
             totals,
@@ -102,10 +102,10 @@ for (let item of items) {
             customerInfo,
             receiptData,
             compliance: {
-                employeeId: req.userId,          // ← Use new auth
+                employeeId: req.userId,
                 registerId: 'POS-001',
             },
-            createdBy: req.userId                // ← Track creator
+            createdBy: req.userId
         });
 
         await transaction.save();
@@ -132,6 +132,7 @@ router.get('/', requireAuth, async (req, res) => {
             endDate,
             status,
             paymentMethod,
+            paymentMethods,  // ✅ NEW: Support array of payment methods
             employeeId,
             page = 1,
             limit = 50,
@@ -141,7 +142,7 @@ router.get('/', requireAuth, async (req, res) => {
 
         // CRITICAL: Filter by organizationId
         const filter = { 
-            organizationId: req.organizationId,  // ← Only this organization
+            organizationId: req.organizationId,
             isActive: true 
         };
         
@@ -160,7 +161,7 @@ router.get('/', requireAuth, async (req, res) => {
             
             // Get ALL transactions for this organization
             const allTransactions = await Transaction.find({ 
-                organizationId: req.organizationId,  // ← Filtered
+                organizationId: req.organizationId,
                 isActive: true,
                 'receiptData.localDateString': { $exists: true }
             }).select('transactionId receiptData.localDateString paymentMethod').limit(10);
@@ -175,7 +176,7 @@ router.get('/', requireAuth, async (req, res) => {
                 filter['receiptData.localDateString'] = startTargetDate;
                 
                 const testResult = await Transaction.find({
-                    organizationId: req.organizationId,  // ← Filtered
+                    organizationId: req.organizationId,
                     isActive: true,
                     'receiptData.localDateString': startTargetDate
                 }).select('transactionId receiptData.localDateString');
@@ -202,13 +203,30 @@ router.get('/', requireAuth, async (req, res) => {
         }
         
         if (status) filter.status = status;
-        if (paymentMethod) filter.paymentMethod = paymentMethod;
+        
+        // ✅ NEW: Handle both single and array payment methods
+        if (paymentMethods) {
+            // Parse if it's a string (from query params)
+            const methodsArray = typeof paymentMethods === 'string' 
+                ? paymentMethods.split(',') 
+                : paymentMethods;
+            filter.paymentMethod = { $in: methodsArray };
+            console.log('🔍 Backend: Payment methods filter (array):', methodsArray);
+        } else if (paymentMethod) {
+            filter.paymentMethod = paymentMethod;
+            console.log('🔍 Backend: Payment method filter (single):', paymentMethod);
+        }
+        // ✅ If neither specified, include ALL payment methods
+        
         if (employeeId) filter['compliance.employeeId'] = employeeId;
 
         console.log('🔍 Backend: Final filter object:', JSON.stringify(filter, null, 2));
 
-        const testActualQuery = await Transaction.find(filter).select('transactionId receiptData.localDateString');
+        const testActualQuery = await Transaction.find(filter).select('transactionId receiptData.localDateString paymentMethod');
         console.log(`🔍 Backend: Actual query found ${testActualQuery.length} transactions`);
+        testActualQuery.forEach(txn => {
+            console.log(`  - ${txn.transactionId}: "${txn.receiptData?.localDateString}" (${txn.paymentMethod})`);
+        });
 
         // Calculate pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -249,7 +267,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     try {
         const transaction = await Transaction.findOne({
             _id: req.params.id,
-            organizationId: req.organizationId  // ← Security check
+            organizationId: req.organizationId
         })
             .populate('compliance.employeeId', 'firstName lastName')
             .populate('createdBy', 'firstName lastName')
@@ -280,11 +298,10 @@ router.get('/reports/summary', requireAuth, async (req, res) => {
             });
         }
 
-        // Note: You'll need to update getSalesReport method to accept organizationId
         const summary = await Transaction.getSalesReport(
             startDate, 
             endDate, 
-            req.organizationId  // ← Pass organization filter
+            req.organizationId
         );
         
         res.json({
@@ -322,7 +339,7 @@ router.get('/reports/daily', requireAuth, async (req, res) => {
         const dailyData = await Transaction.aggregate([
             {
                 $match: {
-                    organizationId: req.organizationId,  // ← Filter by organization
+                    organizationId: req.organizationId,
                     createdAt: { $gte: startOfDay, $lte: endOfDay },
                     status: 'completed',
                     isActive: true
@@ -336,10 +353,27 @@ router.get('/reports/daily', requireAuth, async (req, res) => {
                     totalTax: { $sum: '$totals.taxAmount' },
                     totalItems: { $sum: { $sum: '$items.quantity' } },
                     averageTransaction: { $avg: '$totals.grandTotal' },
+                    // ✅ NEW: Payment breakdown
+                    cashOnlyCount: {
+                        $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, 1, 0] }
+                    },
+                    cashOnlyTotal: {
+                        $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash'] }, '$totals.grandTotal', 0] }
+                    },
+                    mixedPaymentCount: {
+                        $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash+credit'] }, 1, 0] }
+                    },
+                    mixedPaymentTotal: {
+                        $sum: { $cond: [{ $eq: ['$paymentMethod', 'cash+credit'] }, '$totals.grandTotal', 0] }
+                    },
+                    creditRedeemed: {
+                        $sum: { $ifNull: ['$totals.creditApplied', 0] }
+                    },
                     paymentMethodBreakdown: {
                         $push: {
                             method: '$paymentMethod',
-                            amount: '$totals.grandTotal'
+                            amount: '$totals.grandTotal',
+                            creditApplied: { $ifNull: ['$totals.creditApplied', 0] }
                         }
                     }
                 }
@@ -354,6 +388,11 @@ router.get('/reports/daily', requireAuth, async (req, res) => {
                 totalTax: 0,
                 totalItems: 0,
                 averageTransaction: 0,
+                cashOnlyCount: 0,
+                cashOnlyTotal: 0,
+                mixedPaymentCount: 0,
+                mixedPaymentTotal: 0,
+                creditRedeemed: 0,
                 paymentMethodBreakdown: []
             }
         });
@@ -367,6 +406,130 @@ router.get('/reports/daily', requireAuth, async (req, res) => {
     }
 });
 
+// ✅ NEW: GET /api/transactions/reports/payment-breakdown - Payment method analysis
+router.get('/reports/payment-breakdown', requireAuth, async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        
+        if (!startDate || !endDate) {
+            return res.status(400).json({
+                message: 'startDate and endDate are required'
+            });
+        }
+
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const breakdown = await Transaction.aggregate([
+            {
+                $match: {
+                    organizationId: req.organizationId,
+                    createdAt: { $gte: start, $lte: end },
+                    status: 'completed',
+                    isActive: true
+                }
+            },
+            {
+                $group: {
+                    _id: '$paymentMethod',
+                    count: { $sum: 1 },
+                    totalRevenue: { $sum: '$totals.grandTotal' },
+                    totalCashReceived: { $sum: { $ifNull: ['$cashReceived', 0] } },
+                    totalCreditApplied: { $sum: { $ifNull: ['$totals.creditApplied', 0] } }
+                }
+            },
+            {
+                $sort: { totalRevenue: -1 }
+            }
+        ]);
+
+        res.json({
+            period: {
+                startDate: startDate,
+                endDate: endDate
+            },
+            breakdown: breakdown.map(item => ({
+                paymentMethod: item._id,
+                transactionCount: item.count,
+                totalRevenue: item.totalRevenue,
+                cashReceived: item.totalCashReceived,
+                creditApplied: item.totalCreditApplied,
+                averageTransaction: item.count > 0 ? item.totalRevenue / item.count : 0
+            }))
+        });
+
+    } catch (error) {
+        console.error('Error generating payment breakdown:', error);
+        res.status(500).json({
+            message: 'Error generating payment breakdown',
+            error: error.message
+        });
+    }
+});
+
+// ✅ NEW: GET /api/transactions/reports/credit-redemption - Credit usage report
+router.get('/reports/credit-redemption', requireAuth, async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        
+        if (!startDate || !endDate) {
+            return res.status(400).json({
+                message: 'startDate and endDate are required'
+            });
+        }
+
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+
+        const creditReport = await Transaction.aggregate([
+            {
+                $match: {
+                    organizationId: req.organizationId,
+                    createdAt: { $gte: start, $lte: end },
+                    status: 'completed',
+                    isActive: true,
+                    'totals.creditApplied': { $gt: 0 }
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalCreditRedeemed: { $sum: '$totals.creditApplied' },
+                    transactionCount: { $sum: 1 },
+                    averageCreditPerTransaction: { $avg: '$totals.creditApplied' },
+                    totalRevenue: { $sum: '$totals.grandTotal' }
+                }
+            }
+        ]);
+
+        res.json({
+            period: {
+                startDate: startDate,
+                endDate: endDate
+            },
+            summary: creditReport[0] || {
+                totalCreditRedeemed: 0,
+                transactionCount: 0,
+                averageCreditPerTransaction: 0,
+                totalRevenue: 0
+            }
+        });
+
+    } catch (error) {
+        console.error('Error generating credit redemption report:', error);
+        res.status(500).json({
+            message: 'Error generating credit redemption report',
+            error: error.message
+        });
+    }
+});
+
 // PUT /api/transactions/:id/refund - Process refund
 router.put('/:id/refund', requireAuth, async (req, res) => {
     try {
@@ -374,7 +537,7 @@ router.put('/:id/refund', requireAuth, async (req, res) => {
         
         const transaction = await Transaction.findOne({
             _id: req.params.id,
-            organizationId: req.organizationId  // ← Security check
+            organizationId: req.organizationId
         });
         
         if (!transaction) {
@@ -395,7 +558,7 @@ router.put('/:id/refund', requireAuth, async (req, res) => {
             amount,
             reason,
             refundedAt: new Date(),
-            refundedBy: req.userId  // ← Track who refunded
+            refundedBy: req.userId
         };
 
         await transaction.save();
